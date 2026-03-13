@@ -233,7 +233,7 @@ class GameViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'], url_path='import')
     def import_games(self, request):
         """Bulk import games from Chess.com CSV or Lichess PGN"""
-        logger.info("Import games endpoint called")
+        logger.info(f"Import games endpoint called by user: {request.user.username}")
         
         serializer = GameImportSerializer(data=request.data)
         
@@ -243,6 +243,16 @@ class GameViewSet(viewsets.ModelViewSet):
         
         platform = serializer.validated_data['platform']
         file = serializer.validated_data['file']
+        
+        # Get username for Lichess imports
+        username = None
+        if platform == 'lichess':
+            username = serializer.validated_data.get('username')
+            if not username:
+                return Response(
+                    {'error': 'Username is required for Lichess imports'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         
         try:
             if platform == 'chesscom':
@@ -290,7 +300,10 @@ class GameViewSet(viewsets.ModelViewSet):
             
             else:  # lichess
                 pgn_content = file.read().decode('utf-8')
-                games = LichessImporter.parse_pgn(pgn_content, username=request.user.username)
+                # Use the provided username to identify games
+                games = LichessImporter.parse_pgn(pgn_content, username=username)
+                
+                logger.info(f"Parsed {len(games)} games from Lichess PGN for user {username}")
                 
                 imported = []
                 errors = []
@@ -306,14 +319,16 @@ class GameViewSet(viewsets.ModelViewSet):
                                 'opponent': game.opponent_name
                             })
                         else:
+                            logger.error(f"Game {idx} validation errors: {game_serializer.errors}")
                             errors.append({
                                 'game_index': idx,
                                 'errors': game_serializer.errors
                             })
                     else:
+                        logger.warning(f"Game {idx} could not be parsed or result not determined")
                         errors.append({
                             'game_index': idx,
-                            'error': 'Could not determine game result'
+                            'error': 'Could not determine game result or identify your games'
                         })
                 
                 return Response({

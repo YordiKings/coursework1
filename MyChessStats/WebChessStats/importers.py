@@ -74,7 +74,6 @@ class ChessComImporter:
             win_method = cls.WIN_METHOD_MAP.get(game_result, 'OTH')
         elif game_result in ['resigned', 'timeout', 'abandoned']:
             # For these, the result column tells us who won
-            # If userColor is white and result is 'resigned', that means opponent resigned -> win for user
             if user_color == 'white' and game_result == 'resigned':
                 result_code = 'W'
             elif user_color == 'black' and game_result == 'resigned':
@@ -86,9 +85,16 @@ class ChessComImporter:
             result_code = None
             win_method = None
         
-        # Parse players
-        white_player = row.get('userName', '') if user_color == 'white' else row.get('opponent', '')
-        black_player = row.get('opponent', '') if user_color == 'white' else row.get('userName', '')
+        # Parse players - handle missing usernames
+        user_name = row.get('userName', '')
+        opponent = row.get('opponent', '')
+        
+        white_player = user_name if user_color == 'white' else opponent
+        black_player = opponent if user_color == 'white' else user_name
+        
+        # Default to 'Unknown' if empty
+        white_player = white_player or 'Unknown'
+        black_player = black_player or 'Unknown'
         
         # Get ratings
         my_rating = cls.parse_int(row.get('userRating'))
@@ -102,6 +108,12 @@ class ChessComImporter:
         start_time = cls.parse_time(row.get('startTime', ''))
         end_time = cls.parse_time(row.get('endTime', ''))
         
+        # Parse move count - IMPORTANT: handle the case where moveCount contains "resigned"
+        move_count_str = row.get('moveCount', '')
+        move_count = None
+        if move_count_str and move_count_str.strip().isdigit():
+            move_count = int(move_count_str.strip())
+        
         # Build game data
         game_data = {
             'platform': 'CH',  # Chess.com
@@ -112,8 +124,8 @@ class ChessComImporter:
             'end_time': end_time,
             'time_class': row.get('timeClass', '').lower(),
             'time_control': '',
-            'white_player': white_player or 'Unknown',
-            'black_player': black_player or 'Unknown',
+            'white_player': white_player,
+            'black_player': black_player,
             'my_color': my_color,
             'result': result_code,
             'win_method': win_method,
@@ -121,12 +133,12 @@ class ChessComImporter:
             'termination': won_by or outcome,
             'my_rating': my_rating,
             'opponent_rating': opponent_rating,
-            'opponent_name': row.get('opponent', ''),
+            'opponent_name': opponent,
             'opponent_url': row.get('opponentUrl', ''),
             'opening': row.get('opening', '').strip(),
             'opening_url': row.get('openingUrl', '').strip(),
             'fen': row.get('fen', '').strip(),
-            'move_count': cls.parse_int(row.get('moveCount')),
+            'move_count': move_count,  # Now properly handles non-numeric values
             'my_accuracy': cls.parse_float(row.get('userAccuracy')),
             'opponent_accuracy': cls.parse_float(row.get('opponentAccuracy')),
             'is_active': True,
@@ -170,7 +182,7 @@ class LichessImporter:
         """Parse PGN content containing multiple games"""
         games = []
         
-        # Split by empty lines between games
+        # Split by empty lines between games (common PGN separator)
         pgn_games = pgn_content.strip().split('\n\n\n')
         
         for pgn_game in pgn_games:
@@ -180,7 +192,15 @@ class LichessImporter:
                     games.append(game_data)
         
         return games
-    
+    @staticmethod
+    def parse_int(value):
+        """Parse integer value safely"""
+        if value is None or str(value).strip() == '':
+            return None
+        try:
+            return int(str(value).strip())
+        except (ValueError, TypeError):
+            return None
     @classmethod
     def parse_single_game(cls, pgn_string, username=None):
         """Parse a single PGN game"""
@@ -191,13 +211,13 @@ class LichessImporter:
             
             headers = game.headers
             
-            # Extract basic info
+            # Extract basic info with defaults
             game_id = headers.get('GameId', '')
-            if not game_id:
+            site = headers.get('Site', '')  # Define site at the top with a default
+            
+            if not game_id and site:
                 # Try to extract from Site
-                site = headers.get('Site', '')
-                if site:
-                    game_id = site.split('/')[-1]
+                game_id = site.split('/')[-1]
             
             # Parse date
             date_str = headers.get('UTCDate', headers.get('Date', ''))
@@ -239,31 +259,47 @@ class LichessImporter:
             opponent_name = None
             
             if username:
-                if username.lower() == white.lower():
+                username_lower = username.lower().strip()
+                white_lower = white.lower().strip()
+                black_lower = black.lower().strip()
+                
+                if username_lower == white_lower:
                     my_color = 'white'
                     my_rating = white_elo
                     opponent_rating = black_elo
                     opponent_name = black
-                elif username.lower() == black.lower():
+                elif username_lower == black_lower:
                     my_color = 'black'
                     my_rating = black_elo
                     opponent_rating = white_elo
                     opponent_name = white
+                else:
+                    # Username doesn't match either player - skip this game
+                    return None
+            else:
+                # If no username provided, default to white
+                my_color = 'white'
+                my_rating = white_elo
+                opponent_rating = black_elo
+                opponent_name = black
             
             # Time control
             time_control = headers.get('TimeControl', '')
             
             # Parse time control into time_class
             time_class = 'classical'
-            if '+' in time_control:
-                time_sec = int(time_control.split('+')[0])
-                if time_sec < 180:
-                    time_class = 'bullet'
-                elif time_sec < 480:
-                    time_class = 'blitz'
-                elif time_sec < 1500:
-                    time_class = 'rapid'
-                else:
+            if time_control and '+' in time_control:
+                try:
+                    time_sec = int(time_control.split('+')[0])
+                    if time_sec < 180:
+                        time_class = 'bullet'
+                    elif time_sec < 480:
+                        time_class = 'blitz'
+                    elif time_sec < 1500:
+                        time_class = 'rapid'
+                    else:
+                        time_class = 'classical'
+                except ValueError:
                     time_class = 'classical'
             
             # Opening
@@ -289,6 +325,10 @@ class LichessImporter:
             
             # Full PGN
             full_pgn = str(game)
+            
+            # Create a default game_id if still empty
+            if not game_id:
+                game_id = f"lichess_{white}_{black}_{date_played or 'unknown'}"
             
             # Build game data
             game_data = {
@@ -321,14 +361,6 @@ class LichessImporter:
             
         except Exception as e:
             print(f"Error parsing PGN: {e}")
-            return None
-    
-    @staticmethod
-    def parse_int(value):
-        """Parse integer value safely"""
-        if not value or str(value).strip() == '':
-            return None
-        try:
-            return int(value)
-        except (ValueError, TypeError):
+            import traceback
+            traceback.print_exc()
             return None

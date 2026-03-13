@@ -85,7 +85,7 @@ class Game(models.Model):
     fen = models.CharField(max_length=100, blank=True)
     pgn = models.TextField(blank=True)
     moves = models.TextField(blank=True)
-    move_count = models.IntegerField(default=0)
+    move_count = models.IntegerField(null=True, blank=True, default=0)
     
     # Accuracy metrics
     my_accuracy = models.FloatField(

@@ -53,6 +53,19 @@ class GameImportSerializer(serializers.Serializer):
     """Serializer for bulk import from CSV/PGN"""
     file = serializers.FileField()
     platform = serializers.ChoiceField(choices=['chesscom', 'lichess'])
+    username = serializers.CharField(required=False, allow_blank=True, 
+                                    help_text="Your username on this platform (required for Lichess)")
+    
+    def validate(self, data):
+        """Validate based on platform"""
+        platform = data.get('platform')
+        username = data.get('username')
+        
+        if platform == 'lichess' and not username:
+            raise serializers.ValidationError(
+                {"username": "Username is required for Lichess imports"}
+            )
+        return data
     
     def validate_file(self, value):
         platform = self.initial_data.get('platform')

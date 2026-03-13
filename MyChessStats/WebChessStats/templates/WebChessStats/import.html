@@ -33,6 +33,7 @@
                         
                         <form id="chesscomImportForm" enctype="multipart/form-data">
                             {% csrf_token %}
+                            <input type="hidden" name="platform" value="chesscom">
                             <div class="mb-3">
                                 <label for="chesscomFile" class="form-label">Chess.com CSV File</label>
                                 <input type="file" class="form-control" id="chesscomFile" name="file" accept=".csv" required>
@@ -53,6 +54,13 @@
                         
                         <form id="lichessImportForm" enctype="multipart/form-data">
                             {% csrf_token %}
+                            <input type="hidden" name="platform" value="lichess">
+                            <div class="mb-3">
+                                <label for="lichessUsername" class="form-label">Your Lichess Username</label>
+                                <input type="text" class="form-control" id="lichessUsername" name="username" 
+                                       placeholder="Enter your Lichess username" required>
+                                <div class="form-text">This is needed to identify which games are yours</div>
+                            </div>
                             <div class="mb-3">
                                 <label for="lichessFile" class="form-label">Lichess PGN File</label>
                                 <input type="file" class="form-control" id="lichessFile" name="file" accept=".pgn" required>
@@ -67,7 +75,7 @@
             </div>
         </div>
         
-        <!-- Progress Card (hidden initially) -->
+        <!-- Progress Card -->
         <div class="card mt-4" id="progressCard" style="display: none;">
             <div class="card-header bg-success text-white">
                 <h5 class="mb-0"><i class="fas fa-spinner fa-spin"></i> Import Progress</h5>
@@ -88,25 +96,12 @@
 
 {% block extra_js %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('chesscomImportForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        importGames('chesscom');
-    });
-    
-    document.getElementById('lichessImportForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        importGames('lichess');
-    });
-});
-
 function getCookie(name) {
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
         const cookies = document.cookie.split(';');
         for (let i = 0; i < cookies.length; i++) {
             const cookie = cookies[i].trim();
-            // Does this cookie string begin with the name we want?
             if (cookie.substring(0, name.length + 1) === (name + '=')) {
                 cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
                 break;
@@ -116,20 +111,34 @@ function getCookie(name) {
     return cookieValue;
 }
 
-// Add this function to ensure CSRF token is included in all fetch requests
-function csrfSafeMethod(method) {
-    // These HTTP methods do not require CSRF protection
-    return (/^(GET|HEAD|OPTIONS|TRACE)$/.test(method));
+function showLoading() {
+    document.getElementById('loadingSpinner').style.display = 'block';
 }
 
-function importGames(platform) {
+function hideLoading() {
+    document.getElementById('loadingSpinner').style.display = 'none';
+}
+
+async function importGames(platform) {
     const form = document.getElementById(platform + 'ImportForm');
+    const formData = new FormData(form);
+    
+    // Validate file
     const fileInput = document.getElementById(platform + 'File');
     const file = fileInput.files[0];
     
     if (!file) {
         alert('Please select a file');
         return;
+    }
+    
+    // Validate username for Lichess
+    if (platform === 'lichess') {
+        const username = document.getElementById('lichessUsername').value;
+        if (!username) {
+            alert('Please enter your Lichess username');
+            return;
+        }
     }
     
     // Show progress card
@@ -144,10 +153,6 @@ function importGames(platform) {
     statusDiv.innerHTML = 'Uploading file...';
     resultsDiv.innerHTML = '';
     
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('platform', platform);
-    
     // Get CSRF token
     const csrftoken = getCookie('csrftoken');
     
@@ -161,25 +166,21 @@ function importGames(platform) {
         }
     }, 500);
     
-    // Create fetch request with proper headers
-    fetch('/api/games/import/', {
-        method: 'POST',
-        body: formData,
-        headers: {
-            'X-CSRFToken': csrftoken,  // This is the key - sending the CSRF token
-        },
-        credentials: 'same-origin'  // This ensures cookies are sent with the request
-    })
-    .then(response => {
-        if (!response.ok) {
-            return response.json().then(err => {
-                throw new Error(err.error || JSON.stringify(err));
-            });
-        }
-        return response.json();
-    })
-    .then(data => {
+    try {
+        const response = await fetch('/api/games/import/', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': csrftoken
+            },
+            credentials: 'same-origin'
+        });
+        
         clearInterval(interval);
+        
+        const data = await response.json();
+        console.log('Import response:', data);
+        
         progressBar.style.width = '100%';
         progressBar.textContent = '100%';
         
@@ -216,7 +217,7 @@ function importGames(platform) {
             `;
         }
         
-        // Show any errors
+        // Show errors
         if (data.errors && data.errors.length > 0) {
             let errorHtml = `
                 <div class="alert alert-danger mt-3">
@@ -242,16 +243,18 @@ function importGames(platform) {
             resultsDiv.innerHTML += errorHtml;
         }
         
-        // Add button to view games
-        resultsDiv.innerHTML += `
-            <div class="text-center mt-3">
-                <a href="/games/" class="btn btn-success">
-                    <i class="fas fa-eye"></i> View All Games
-                </a>
-            </div>
-        `;
-    })
-    .catch(error => {
+        // Add view button
+        if (data.imported_count > 0) {
+            resultsDiv.innerHTML += `
+                <div class="text-center mt-3">
+                    <a href="/games/" class="btn btn-success">
+                        <i class="fas fa-eye"></i> View All Games
+                    </a>
+                </div>
+            `;
+        }
+        
+    } catch (error) {
         clearInterval(interval);
         console.error('Import error:', error);
         progressBar.style.width = '100%';
@@ -263,7 +266,20 @@ function importGames(platform) {
                 Error importing games: ${error.message}
             </div>
         `;
-    });
+    }
 }
+
+// Attach event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('chesscomImportForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        importGames('chesscom');
+    });
+    
+    document.getElementById('lichessImportForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        importGames('lichess');
+    });
+});
 </script>
 {% endblock %}
