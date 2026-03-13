@@ -1,0 +1,238 @@
+{% extends 'WebChessStats/base.html' %}
+
+{% block title %}Import Games - My Chess Stats{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0"><i class="fas fa-upload"></i> Import Games</h4>
+            </div>
+            <div class="card-body">
+                <ul class="nav nav-tabs mb-4" id="importTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="chesscom-tab" data-bs-toggle="tab" data-bs-target="#chesscom" type="button" role="tab">
+                            <i class="fab fa-chess"></i> Chess.com CSV
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="lichess-tab" data-bs-toggle="tab" data-bs-target="#lichess" type="button" role="tab">
+                            <i class="fas fa-chess-knight"></i> Lichess PGN
+                        </button>
+                    </li>
+                </ul>
+                
+                <div class="tab-content">
+                    <!-- Chess.com Tab -->
+                    <div class="tab-pane fade show active" id="chesscom" role="tabpanel">
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            Export your games from Chess.com as CSV and upload here.
+                        </div>
+                        
+                        <form id="chesscomImportForm" enctype="multipart/form-data">
+                            {% csrf_token %}
+                            <div class="mb-3">
+                                <label for="chesscomFile" class="form-label">Chess.com CSV File</label>
+                                <input type="file" class="form-control" id="chesscomFile" name="file" accept=".csv" required>
+                                <div class="form-text">Select the CSV file exported from Chess.com</div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-upload"></i> Import Chess.com Games
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <!-- Lichess Tab -->
+                    <div class="tab-pane fade" id="lichess" role="tabpanel">
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            Export your games from Lichess as PGN and upload here.
+                        </div>
+                        
+                        <form id="lichessImportForm" enctype="multipart/form-data">
+                            {% csrf_token %}
+                            <div class="mb-3">
+                                <label for="lichessFile" class="form-label">Lichess PGN File</label>
+                                <input type="file" class="form-control" id="lichessFile" name="file" accept=".pgn" required>
+                                <div class="form-text">Select the PGN file exported from Lichess</div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-upload"></i> Import Lichess Games
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Progress Card (hidden initially) -->
+        <div class="card mt-4" id="progressCard" style="display: none;">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="fas fa-spinner fa-spin"></i> Import Progress</h5>
+            </div>
+            <div class="card-body">
+                <div class="progress mb-3">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                         id="importProgress" 
+                         style="width: 0%">0%</div>
+                </div>
+                <div id="importStatus" class="text-center"></div>
+                <div id="importResults" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('chesscomImportForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        importGames('chesscom');
+    });
+    
+    document.getElementById('lichessImportForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        importGames('lichess');
+    });
+});
+
+function importGames(platform) {
+    const form = document.getElementById(platform + 'ImportForm');
+    const fileInput = document.getElementById(platform + 'File');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('Please select a file');
+        return;
+    }
+    
+    // Show progress card
+    const progressCard = document.getElementById('progressCard');
+    const progressBar = document.getElementById('importProgress');
+    const statusDiv = document.getElementById('importStatus');
+    const resultsDiv = document.getElementById('importResults');
+    
+    progressCard.style.display = 'block';
+    progressBar.style.width = '10%';
+    progressBar.textContent = '10%';
+    statusDiv.innerHTML = 'Uploading file...';
+    resultsDiv.innerHTML = '';
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('platform', platform);
+    
+    // Simulate progress (since fetch doesn't provide upload progress easily)
+    let progress = 10;
+    const interval = setInterval(() => {
+        if (progress < 90) {
+            progress += 10;
+            progressBar.style.width = progress + '%';
+            progressBar.textContent = progress + '%';
+        }
+    }, 500);
+    
+    fetch('/api/games/import/', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        clearInterval(interval);
+        progressBar.style.width = '100%';
+        progressBar.textContent = '100%';
+        
+        if (data.imported_count > 0) {
+            statusDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle"></i>
+                    Successfully imported ${data.imported_count} games!
+                </div>
+            `;
+            
+            // Show imported games
+            if (data.imported && data.imported.length > 0) {
+                let html = '<h6>Imported Games:</h6><ul class="list-group">';
+                data.imported.slice(0, 10).forEach(game => {
+                    html += `
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Game #${game.id}
+                            <span class="badge bg-primary">${game.opponent}</span>
+                        </li>
+                    `;
+                });
+                if (data.imported.length > 10) {
+                    html += `<li class="list-group-item text-muted">... and ${data.imported.length - 10} more</li>`;
+                }
+                html += '</ul>';
+                resultsDiv.innerHTML = html;
+            }
+            
+            // Show any errors
+            if (data.errors && data.errors.length > 0) {
+                resultsDiv.innerHTML += `
+                    <div class="alert alert-warning mt-3">
+                        <h6>Errors (${data.errors.length}):</h6>
+                        <ul class="mb-0">
+                            ${data.errors.slice(0, 5).map(e => `<li>Row ${e.row}: ${JSON.stringify(e.errors)}</li>`).join('')}
+                            ${data.errors.length > 5 ? `<li>... and ${data.errors.length - 5} more errors</li>` : ''}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            // Add button to view games
+            resultsDiv.innerHTML += `
+                <div class="text-center mt-3">
+                    <a href="{% url 'game_list' %}" class="btn btn-success">
+                        <i class="fas fa-eye"></i> View All Games
+                    </a>
+                </div>
+            `;
+        } else {
+            statusDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle"></i>
+                    Import failed. No games were imported.
+                </div>
+            `;
+        }
+    })
+    .catch(error => {
+        clearInterval(interval);
+        console.error('Import error:', error);
+        progressBar.style.width = '100%';
+        progressBar.textContent = 'Error';
+        progressBar.classList.add('bg-danger');
+        statusDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle"></i>
+                Error importing games: ${error.message}
+            </div>
+        `;
+    });
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>
+{% endblock %}

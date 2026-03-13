@@ -343,3 +343,8 @@ class GameViewSet(viewsets.ModelViewSet):
         return Response({
             'message': f'Permanently deleted {count} soft-deleted games'
         })
+from django.shortcuts import render
+
+def game_detail_view(request, game_id):
+    """Simple view to render game detail template with game_id"""
+    return render(request, 'WebChessStats/game_detail.html', {'game_id': game_id})

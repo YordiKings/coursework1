@@ -1,0 +1,251 @@
+{% extends 'WebChessStats/base.html' %}
+
+{% block title %}Home - My Chess Stats{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="jumbotron bg-light p-5 rounded">
+            <h1 class="display-4">Welcome to My Chess Stats!</h1>
+            <p class="lead">Track, analyze, and improve your chess games from Chess.com and Lichess.</p>
+            <hr class="my-4">
+            <p>Import your games, view statistics, and analyze your performance over time.</p>
+            <div class="d-flex gap-2">
+                <a class="btn btn-primary btn-lg" href="{% url 'import_games' %}" role="button">
+                    <i class="fas fa-upload"></i> Import Games
+                </a>
+                <a class="btn btn-success btn-lg" href="{% url 'game_list' %}" role="button">
+                    <i class="fas fa-eye"></i> View Games
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Stats Cards -->
+<div class="row mb-4" id="quickStats">
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-muted">Total Games</h5>
+                <h2 class="display-4" id="totalGames">-</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-muted">Wins</h5>
+                <h2 class="display-4 win-text" id="totalWins">-</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-muted">Losses</h5>
+                <h2 class="display-4 loss-text" id="totalLosses">-</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-muted">Win Rate</h5>
+                <h2 class="display-4" id="winRate">-</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row mb-4">
+    <div class="col-md-6 mb-3">
+        <div class="card">
+            <div class="card-header">
+                <h5>Games by Platform</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="platformChart" style="height: 300px;"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-3">
+        <div class="card">
+            <div class="card-header">
+                <h5>Results by Time Control</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="timeControlChart" style="height: 300px;"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Games -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Recent Games</h5>
+                <a href="{% url 'game_list' %}" class="btn btn-sm btn-outline-primary">View All</a>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>White</th>
+                                <th>Black</th>
+                                <th>Result</th>
+                                <th>Opening</th>
+                                <th>Time Control</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recentGames">
+                            <tr><td colspan="6" class="text-center">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadQuickStats();
+    loadRecentGames();
+});
+
+function loadQuickStats() {
+    fetch('/api/games/stats/')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('totalGames').textContent = data.total_games;
+            document.getElementById('totalWins').textContent = data.wins;
+            document.getElementById('totalLosses').textContent = data.losses;
+            document.getElementById('winRate').textContent = data.win_percentage + '%';
+            
+            // Platform Chart
+            createPlatformChart(data.by_platform);
+            
+            // Time Control Chart
+            createTimeControlChart(data.by_time_class);
+        })
+        .catch(error => console.error('Error loading stats:', error));
+}
+
+function loadRecentGames() {
+    fetch('/api/games/?order_by=-date_played&limit=10')
+        .then(response => response.json())
+        .then(data => {
+            const tbody = document.getElementById('recentGames');
+            tbody.innerHTML = '';
+            
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No games found</td></tr>';
+                return;
+            }
+            
+            data.forEach(game => {
+                const resultClass = game.result === 'W' ? 'win-text' : 
+                                   game.result === 'L' ? 'loss-text' : 'draw-text';
+                
+                const row = `
+                    <tr onclick="window.location='/game/${game.id}/'" style="cursor: pointer;">
+                        <td>${game.date_played}</td>
+                        <td>${game.white_player}</td>
+                        <td>${game.black_player}</td>
+                        <td class="${resultClass} fw-bold">${game.result_display}</td>
+                        <td>${game.opening || 'Unknown'}</td>
+                        <td>${game.time_class}</td>
+                    </tr>
+                `;
+                tbody.innerHTML += row;
+            });
+        })
+        .catch(error => console.error('Error loading games:', error));
+}
+
+function createPlatformChart(platformData) {
+    const ctx = document.getElementById('platformChart').getContext('2d');
+    
+    const labels = platformData.map(p => p.platform);
+    const counts = platformData.map(p => p.count);
+    const wins = platformData.map(p => p.wins);
+    
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Total Games',
+                    data: counts,
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                },
+                {
+                    label: 'Wins',
+                    data: wins,
+                    backgroundColor: 'rgba(40, 167, 69, 0.5)',
+                    borderColor: 'rgba(40, 167, 69, 1)',
+                    borderWidth: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { stepSize: 1 }
+                }
+            }
+        }
+    });
+}
+
+function createTimeControlChart(timeData) {
+    const ctx = document.getElementById('timeControlChart').getContext('2d');
+    
+    const labels = timeData.map(t => t.time_class);
+    const winRates = timeData.map(t => t.win_percentage);
+    
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Win Rate %',
+                    data: winRates,
+                    backgroundColor: 'rgba(255, 193, 7, 0.2)',
+                    borderColor: 'rgba(255, 193, 7, 1)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: { callback: value => value + '%' }
+                }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}
