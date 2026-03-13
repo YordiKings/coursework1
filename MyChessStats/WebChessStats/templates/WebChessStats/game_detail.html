@@ -50,12 +50,31 @@
     </div>
 </div>
 
-<!-- Move List -->
+<!-- Board Visualization -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0"><i class="fas fa-chess-board"></i> Final Position</h5>
+            </div>
+            <div class="card-body text-center">
+                <div id="boardContainer" class="d-flex justify-content-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading board...</span>
+                    </div>
+                </div>
+                <div id="fenDisplay" class="mt-3 text-muted small"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Move List (if available) -->
 <div class="row">
     <div class="col-12">
         <div class="card">
             <div class="card-header bg-dark text-white">
-                <h5 class="mb-0"><i class="fas fa-arrows-alt"></i> Moves</h5>
+                <h5 class="mb-0"><i class="fas fa-arrows-alt"></i> Game Moves</h5>
             </div>
             <div class="card-body">
                 <div id="movesContainer" class="text-center">
@@ -106,10 +125,20 @@
 
 {% block extra_js %}
 <script>
-const gameId = {{ game_id }};
-let deleteModal = null;
+// Get game ID from the data attribute or URL
+const gameId = {{ game_id|default:0 }};
+console.log('Game ID:', gameId);
 
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, game ID:', gameId);
+    
+    if (!gameId || gameId === 0) {
+        console.error('No game ID provided');
+        document.getElementById('gameInfo').innerHTML = 
+            '<div class="alert alert-danger">Invalid game ID</div>';
+        return;
+    }
+    
     deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
     loadGameDetails();
     
@@ -118,21 +147,80 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-function loadGameDetails() {
-    Promise.all([
-        fetch(`/api/games/${gameId}/`).then(r => r.json()),
-        fetch(`/api/games/${gameId}/pgn/`).catch(() => ({ pgn: '' }))
-    ])
-    .then(([game, pgnData]) => {
+async function loadGameDetails() {
+    console.log('Loading game details for ID:', gameId);
+    
+    try {
+        // Load game data
+        const gameResponse = await fetch(`/api/games/${gameId}/`);
+        if (!gameResponse.ok) {
+            throw new Error(`Game API returned ${gameResponse.status}`);
+        }
+        const game = await gameResponse.json();
+        console.log('Game data:', game);
+        
+        // Load PGN data
+        const pgnResponse = await fetch(`/api/games/${gameId}/pgn/`);
+        let pgnData = {};
+        if (pgnResponse.ok) {
+            pgnData = await pgnResponse.json();
+        } else {
+            console.log('PGN not available:', pgnResponse.status);
+        }
+        
+        // Load board image
+        const boardResponse = await fetch(`/game/${gameId}/board/`);
+        let boardData = { success: false };
+        if (boardResponse.ok) {
+            boardData = await boardResponse.json();
+        } else {
+            console.log('Board not available:', boardResponse.status);
+        }
+        
+        // Render everything
         renderGameInfo(game);
         renderGameStats(game);
         renderMoves(game, pgnData);
-    })
-    .catch(error => {
+        renderBoard(boardData);
+        
+    } catch (error) {
         console.error('Error loading game:', error);
         document.getElementById('gameInfo').innerHTML = 
-            '<div class="alert alert-danger">Error loading game details</div>';
-    });
+            `<div class="alert alert-danger">Error loading game details: ${error.message}</div>`;
+    }
+}
+
+function renderBoard(boardData) {
+    const container = document.getElementById('boardContainer');
+    const fenDisplay = document.getElementById('fenDisplay');
+    
+    console.log('Board data received:', boardData);
+    
+    if (boardData && boardData.success && boardData.image) {
+        container.innerHTML = `<img src="${boardData.image}" alt="Chess board final position" class="img-fluid chess-board" style="max-width: 400px; border: 1px solid #ddd; border-radius: 4px;">`;
+        fenDisplay.innerHTML = `<small class="text-muted">FEN: <code>${boardData.fen || 'Not available'}</code></small>`;
+    } else {
+        container.innerHTML = '<p class="text-muted"><i class="fas fa-chess-board"></i> No board position available</p>';
+        fenDisplay.innerHTML = '';
+    }
+}
+
+function renderMoves(game, pgnData) {
+    const container = document.getElementById('movesContainer');
+    
+    if (pgnData.pgn) {
+        // Format PGN nicely
+        const moves = pgnData.pgn.split('\n\n')[1] || pgnData.pgn;
+        // Clean up the PGN to show only moves
+        const cleanMoves = moves.replace(/\d+\.\.\./g, '').replace(/\{.*?\}/g, '').trim();
+        container.innerHTML = `
+            <pre class="text-start bg-light p-3 rounded" style="max-height: 200px; overflow-y: auto; font-size: 0.9rem;">${cleanMoves}</pre>
+        `;
+    } else if (game.fen) {
+        container.innerHTML = '<p class="text-muted">Only final position available (FEN)</p>';
+    } else {
+        container.innerHTML = '<p class="text-muted">No move data available</p>';
+    }
 }
 
 function renderGameInfo(game) {

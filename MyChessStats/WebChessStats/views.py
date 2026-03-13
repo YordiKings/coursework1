@@ -378,20 +378,32 @@ class GameViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['get'], url_path='pgn')
     def get_pgn(self, request, pk=None):
-        """Get PGN format of the game"""
+        """Get PGN format of the game or generate from FEN"""
         game = self.get_object()
         
-        if not game.pgn:
-            return Response(
-                {'error': 'No PGN available for this game'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
-        return Response({
-            'pgn': game.pgn,
+        response_data = {
             'game_id': game.id,
-            'platform': game.get_platform_display()
-        })
+            'platform': game.get_platform_display(),
+            'has_pgn': bool(game.pgn),
+            'has_fen': bool(game.fen),
+            'fen': game.fen or None,
+        }
+        
+        # If PGN exists, return it
+        if game.pgn:
+            response_data['pgn'] = game.pgn
+            return Response(response_data)
+        
+        # If only FEN exists, return that info
+        if game.fen:
+            return Response(response_data)
+        
+        # No game data available
+        return Response({
+            'error': 'No PGN or FEN available for this game',
+            'game_id': game.id
+        }, status=status.HTTP_404_NOT_FOUND)
+
     @action(detail=False, methods=['delete'], url_path='delete-all')
     def delete_all_games(self, request):
         """Delete ALL games permanently - bypasses soft delete and pagination"""
@@ -420,3 +432,63 @@ class GameViewSet(viewsets.ModelViewSet):
             'deleted_count': deleted_count
         })
 
+    
+from .board_utils import fen_to_svg, get_last_move_from_moves
+
+@login_required
+def game_board_view(request, game_id):
+    """Return board image for a game"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        game = Game.objects.get(id=game_id, is_active=True)
+        logger.info(f"Generating board for game {game_id}")
+        
+        # Try to get FEN from game
+        fen = game.fen
+        
+        # If no FEN but we have PGN, try to extract final position
+        if not fen and game.pgn:
+            try:
+                import chess.pgn
+                from io import StringIO
+                pgn_game = chess.pgn.read_game(StringIO(game.pgn))
+                if pgn_game:
+                    board = pgn_game.board()
+                    for move in pgn_game.mainline_moves():
+                        board.push(move)
+                    fen = board.fen()
+                    logger.info(f"Generated FEN from PGN: {fen[:50]}...")
+            except Exception as e:
+                logger.error(f"Error parsing PGN for board: {e}")
+        
+        if fen:
+            from .board_utils import fen_to_svg
+            svg_data = fen_to_svg(fen)
+            if svg_data:
+                return JsonResponse({
+                    'success': True,
+                    'image': svg_data,
+                    'fen': fen
+                })
+            else:
+                logger.error(f"Failed to generate SVG from FEN: {fen}")
+        
+        return JsonResponse({
+            'success': False,
+            'error': 'Could not generate board image'
+        })
+        
+    except Game.DoesNotExist:
+        logger.error(f"Game {game_id} not found")
+        return JsonResponse({
+            'success': False,
+            'error': 'Game not found'
+        }, status=404)
+    except Exception as e:
+        logger.exception(f"Unexpected error generating board: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
