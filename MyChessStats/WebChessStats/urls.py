@@ -18,4 +18,5 @@ urlpatterns = [
     path('import/', TemplateView.as_view(template_name='WebChessStats/import.html'), name='import_games'),
     path('stats/', TemplateView.as_view(template_name='WebChessStats/stats.html'), name='stats'),
     path('game/<int:game_id>/', views.game_detail_view, name='game_detail'),
+    path('game/create/', views.game_create_view, name='game_create'),
 ]

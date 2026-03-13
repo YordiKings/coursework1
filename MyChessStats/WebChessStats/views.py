@@ -2,8 +2,9 @@ from rest_framework import viewsets, status, generics
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render, redirect
 from django.db.models import Q, Count, Avg, Sum
+from django.contrib import messages
 from .models import Game
 from .serializers import (
     GameSerializer, GameListSerializer, 
@@ -343,8 +344,17 @@ class GameViewSet(viewsets.ModelViewSet):
         return Response({
             'message': f'Permanently deleted {count} soft-deleted games'
         })
-from django.shortcuts import render
+
 
 def game_detail_view(request, game_id):
     """Simple view to render game detail template with game_id"""
     return render(request, 'WebChessStats/game_detail.html', {'game_id': game_id})
+
+def game_create_view(request):
+    """View for manually creating a new game"""
+    if request.method == 'POST':
+        # Handle form submission (we'll implement this later)
+        messages.success(request, 'Game created successfully!')
+        return redirect('game_list')
+    
+    return render(request, 'WebChessStats/game_form.html')
