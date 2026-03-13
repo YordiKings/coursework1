@@ -6,12 +6,7 @@ router = DefaultRouter()
 router.register(r'games', views.GameViewSet, basename='game-api')
 
 urlpatterns = [
-    # API endpoints
-    path('api/', include(router.urls)),
-    
-    # Test endpoint
-    path('test-ajax/', views.test_ajax, name='test_ajax'),
-    
+
     # Authentication
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
@@ -22,5 +17,8 @@ urlpatterns = [
     path('game/<int:game_id>/', views.game_detail_view, name='game_detail'),
     path('import/', views.import_view, name='import_games'),
     path('stats/', views.stats_view, name='stats'),
-    # Removed: game/create/
+    
+    # API endpoints - including direct delete
+    path('api/', include(router.urls)),
+    path('api/delete-all-games/', views.delete_all_games_direct, name='delete-all-direct'),
 ]

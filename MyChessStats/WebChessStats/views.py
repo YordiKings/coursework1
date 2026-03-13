@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import ensure_csrf_cookie, csrf_protect
 from django.views.decorators.http import require_http_methods
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -22,19 +22,6 @@ import io
 import logging
 
 logger = logging.getLogger(__name__)
-
-# ============ TEST AJAX VIEW ============
-def test_ajax(request):
-    """Test endpoint to verify AJAX headers"""
-    logger.info("Test AJAX view called")
-    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-    
-    return JsonResponse({
-        'success': is_ajax,
-        'message': 'AJAX is working!' if is_ajax else 'Not an AJAX request',
-        'received_header': request.headers.get('X-Requested-With', 'None'),
-        'method': request.method
-    })
 
 # ============ AUTHENTICATION VIEWS ============
 @require_http_methods(["GET", "POST"])
@@ -169,7 +156,31 @@ def stats_view(request):
     """Statistics page view"""
     return render(request, 'WebChessStats/stats.html')
 
-
+@login_required
+@require_http_methods(["DELETE"])
+@csrf_protect
+def delete_all_games_direct(request):
+    """Direct view to delete ALL games - bypasses DRF completely"""
+    if request.method == 'DELETE':
+        confirm = request.GET.get('confirm', 'false').lower() == 'true'
+        
+        total_count = Game.objects.all().count()
+        
+        if not confirm:
+            return JsonResponse({
+                'error': 'Confirmation required',
+                'message': f'This will delete {total_count} games. Use ?confirm=true to proceed.',
+                'total_count': total_count
+            }, status=400)
+        
+        # Delete all games
+        deleted_count = Game.objects.all().delete()[0]
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Successfully deleted {deleted_count} games',
+            'deleted_count': deleted_count
+        })
 # ============ API VIEWSET ============
 class GameViewSet(viewsets.ModelViewSet):
     """
@@ -382,22 +393,30 @@ class GameViewSet(viewsets.ModelViewSet):
             'platform': game.get_platform_display()
         })
     @action(detail=False, methods=['delete'], url_path='delete-all')
-    def delete_all(self, request):
-        """Delete all games (requires confirmation)"""
-        # Get confirmation from query param
+    def delete_all_games(self, request):
+        """Delete ALL games permanently - bypasses soft delete and pagination"""
+        # Use the actual model manager, not the viewset's filtered queryset
+        total_count = Game.objects.all().count()
+        active_count = Game.objects.filter(is_active=True).count()
+        
+        # Optional: Add a confirmation parameter
         confirm = request.query_params.get('confirm', 'false').lower() == 'true'
         
         if not confirm:
             return Response({
                 'error': 'Confirmation required',
-                'message': 'Use ?confirm=true to delete all games'
+                'message': f'This will delete {total_count} total games ({active_count} active). Use ?confirm=true to proceed.',
+                'total_count': total_count,
+                'active_count': active_count
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        count = Game.objects.filter(is_active=True).count()
-        # Hard delete all games
-        Game.objects.all().delete()
+        # Hard delete ALL games - completely bypass the model's default manager
+        # This deletes every single game record from the database
+        deleted_count = Game.objects.all().delete()[0]
         
         return Response({
-            'message': f'Successfully deleted {count} games',
-            'deleted_count': count
-        })  
+            'success': True,
+            'message': f'Successfully deleted {deleted_count} games',
+            'deleted_count': deleted_count
+        })
+

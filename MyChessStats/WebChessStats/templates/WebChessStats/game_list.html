@@ -327,21 +327,24 @@ function deleteGame(gameId) {
         method: 'DELETE',
         headers: {
             'X-CSRFToken': getCookie('csrftoken')
-        }
+        },
+        credentials: 'same-origin'
     })
     .then(response => {
         deleteModal.hide();
         if (response.ok) {
+            showAlert('Game deleted successfully (soft delete)', 'success');
             loadGames();
-            showAlert('Game deleted successfully', 'success');
         } else {
-            showAlert('Error deleting game', 'danger');
+            return response.json().then(data => {
+                throw new Error(data.error || 'Error deleting game');
+            });
         }
     })
     .catch(error => {
         deleteModal.hide();
         console.error('Error:', error);
-        showAlert('Error deleting game', 'danger');
+        showAlert('Error deleting game: ' + error.message, 'danger');
     });
 }
 
@@ -375,15 +378,9 @@ function deleteAllGames() {
     deleteAllModal.hide();
     showLoading();
     
-    // Double confirm
-    if (!confirm('This will permanently delete ALL games. Are you sure?')) {
-        hideLoading();
-        return;
-    }
-    
-    // First, get total count
-    fetch('/api/games/?limit=1', {
-        method: 'GET',
+    // First, get the count to confirm
+    fetch('/api/games/delete-all/', {
+        method: 'DELETE',
         headers: {
             'X-CSRFToken': getCookie('csrftoken')
         },
@@ -391,59 +388,42 @@ function deleteAllGames() {
     })
     .then(response => response.json())
     .then(data => {
-        const totalCount = data.count || 0;
-        
-        if (totalCount === 0) {
-            hideLoading();
-            showAlert('No games to delete', 'warning');
-            return;
+        if (data.error) {
+            // This is the confirmation response
+            if (confirm(`${data.message}\n\nClick OK to proceed with deletion.`)) {
+                // User confirmed, make the actual delete request
+                return fetch('/api/games/delete-all/?confirm=true', {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    credentials: 'same-origin'
+                });
+            } else {
+                hideLoading();
+                showAlert('Deletion cancelled', 'info');
+                return null;
+            }
+        } else {
+            // This is the success response
+            return data;
         }
-        
-        // Confirm with exact count
-        if (!confirm(`Are you absolutely sure you want to delete all ${totalCount} games?`)) {
-            hideLoading();
-            return;
-        }
-        
-        // Fetch ALL games (get a large limit to ensure we get all)
-        return fetch(`/api/games/?limit=10000`, {
-            method: 'GET',
-            headers: {
-                'X-CSRFToken': getCookie('csrftoken')
-            },
-            credentials: 'same-origin'
-        });
     })
-    .then(response => response.json())
+    .then(response => {
+        if (response && response.then) {
+            // Handle the second fetch promise
+            return response.then(data => data);
+        }
+        return response;
+    })
     .then(data => {
-        const games = data.results || data;
-        
-        if (games.length === 0) {
-            hideLoading();
-            showAlert('No games to delete', 'warning');
-            return;
-        }
-        
-        // Delete games one by one
-        const deletePromises = games.map(game => 
-            fetch(`/api/games/${game.id}/?hard=true`, {
-                method: 'DELETE',
-                headers: {
-                    'X-CSRFToken': getCookie('csrftoken')
-                },
-                credentials: 'same-origin'
-            })
-        );
-        
-        return Promise.all(deletePromises);
-    })
-    .then(results => {
-        if (results) {
-            const successCount = results.filter(r => r && r.ok).length;
-            hideLoading();
-            showAlert(`Successfully deleted ${successCount} games`, 'success');
+        hideLoading();
+        if (data && data.success) {
+            showAlert(data.message, 'success');
             currentPage = 1;
             loadGames(); // Reload the list
+        } else if (data) {
+            showAlert(data.error || 'Error deleting games', 'danger');
         }
     })
     .catch(error => {
@@ -484,8 +464,9 @@ function deleteAllGames() {
     deleteAllModal.hide();
     showLoading();
     
-    fetch('/api/games/?limit=1000', {
-        method: 'GET',
+    // First, get the count to confirm
+    fetch('/api/delete-all-games/', {
+        method: 'DELETE',
         headers: {
             'X-CSRFToken': getCookie('csrftoken')
         },
@@ -493,49 +474,49 @@ function deleteAllGames() {
     })
     .then(response => response.json())
     .then(data => {
-        const games = data.results || data;
-        if (games.length === 0) {
-            hideLoading();
-            alert('No games to delete');
-            return;
-        }
-        
-        // Confirm again with count
-        if (!confirm(`Are you absolutely sure you want to delete all ${games.length} games?`)) {
-            hideLoading();
-            return;
-        }
-        
-        // Delete games one by one (or use bulk delete endpoint)
-        const deletePromises = games.map(game => 
-            fetch(`/api/games/${game.id}/?hard=true`, {
-                method: 'DELETE',
-                headers: {
-                    'X-CSRFToken': getCookie('csrftoken')
-                },
-                credentials: 'same-origin'
-            })
-        );
-        
-        Promise.all(deletePromises)
-            .then(results => {
-                const successCount = results.filter(r => r.ok).length;
+        if (data.error) {
+            // This is the confirmation response
+            if (confirm(`${data.message}\n\nClick OK to proceed with deletion.`)) {
+                // User confirmed, make the actual delete request
+                return fetch('/api/delete-all-games/?confirm=true', {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    credentials: 'same-origin'
+                });
+            } else {
                 hideLoading();
-                showAlert(`Successfully deleted ${successCount} games`, 'success');
-                loadGames(); // Reload the list
-            })
-            .catch(error => {
-                hideLoading();
-                console.error('Error deleting games:', error);
-                showAlert('Error deleting games', 'danger');
-            });
+                showAlert('Deletion cancelled', 'info');
+                return null;
+            }
+        } else {
+            // This is the success response
+            return data;
+        }
+    })
+    .then(response => {
+        if (response && response.then) {
+            // Handle the second fetch promise
+            return response.then(data => data);
+        }
+        return response;
+    })
+    .then(data => {
+        hideLoading();
+        if (data && data.success) {
+            showAlert(data.message, 'success');
+            currentPage = 1;
+            loadGames(); // Reload the list
+        } else if (data) {
+            showAlert(data.error || 'Error deleting games', 'danger');
+        }
     })
     .catch(error => {
         hideLoading();
-        console.error('Error fetching games:', error);
-        showAlert('Error fetching games', 'danger');
+        console.error('Error deleting games:', error);
+        showAlert('Error deleting games: ' + error.message, 'danger');
     });
 }
-
 </script>
 {% endblock %}
