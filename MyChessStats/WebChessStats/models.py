@@ -1,7 +1,8 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
-
+from django.contrib.auth.models import User
+from django.conf import settings
 class Game(models.Model):
     # Platform identification
     class Platform(models.TextChoices):
@@ -35,6 +36,15 @@ class Game(models.Model):
         CLASSICAL = 'classical', 'Classical'
         CORRESPONDENCE = 'correspondence', 'Correspondence'
     
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='chess_games',
+        null=True,  # Temporarily allow null for migration
+        blank=True,
+        db_index=True
+    )
+
     # Basic identifiers
     platform = models.CharField(max_length=2, choices=Platform.choices, db_index=True)
     game_id = models.CharField(max_length=100, unique=True, db_index=True)
@@ -107,6 +117,9 @@ class Game(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
+
+    
+
     
     class Meta:
         ordering = ['-date_played', '-start_time']

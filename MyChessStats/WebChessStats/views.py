@@ -1,6 +1,9 @@
 from django.db import models
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
@@ -121,7 +124,125 @@ def logout_view(request):
     """Handle user logout"""
     logout(request)
     return redirect('login')
-
+@require_http_methods(["GET", "POST"])
+@ensure_csrf_cookie
+def register_view(request):
+    """Handle user registration - supports both AJAX and regular form submissions"""
+    
+    logger.info("=" * 50)
+    logger.info("REGISTER VIEW CALLED")
+    logger.info(f"Method: {request.method}")
+    
+    # If user is already authenticated
+    if request.user.is_authenticated:
+        logger.info(f"User already authenticated: {request.user.username}")
+        return redirect('home')
+    
+    # Check for AJAX request
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    
+    # Handle POST requests
+    if request.method == 'POST':
+        logger.info("Processing registration POST request")
+        
+        # Handle AJAX JSON requests
+        if is_ajax:
+            try:
+                data = json.loads(request.body)
+                username = data.get('username')
+                email = data.get('email', '')
+                password = data.get('password')
+                password_confirm = data.get('password_confirm')
+                logger.info(f"JSON data received - Username: {username}, Email: {email}")
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON decode error: {e}")
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Invalid JSON data'
+                }, status=400)
+        else:
+            # Handle regular form submission
+            username = request.POST.get('username')
+            email = request.POST.get('email', '')
+            password = request.POST.get('password')
+            password_confirm = request.POST.get('password_confirm')
+        
+        # Validate input
+        errors = {}
+        
+        if not username:
+            errors['username'] = 'Username is required'
+        elif len(username) < 3:
+            errors['username'] = 'Username must be at least 3 characters'
+        elif User.objects.filter(username=username).exists():
+            errors['username'] = 'Username already taken'
+        
+        if email and User.objects.filter(email=email).exclude(email='').exists():
+            errors['email'] = 'Email already registered'
+        
+        if not password:
+            errors['password'] = 'Password is required'
+        elif len(password) < 8:
+            errors['password'] = 'Password must be at least 8 characters'
+        
+        if password != password_confirm:
+            errors['password_confirm'] = 'Passwords do not match'
+        
+        # Validate password strength using Django's validators
+        if password and not errors.get('password'):
+            try:
+                validate_password(password)
+            except ValidationError as e:
+                errors['password'] = ', '.join(e.messages)
+        
+        if errors:
+            logger.warning(f"Registration validation errors: {errors}")
+            if is_ajax:
+                return JsonResponse({
+                    'success': False,
+                    'errors': errors
+                }, status=400)
+            else:
+                for field, error in errors.items():
+                    messages.error(request, f"{field}: {error}")
+                return render(request, 'WebChessStats/register.html')
+        
+        # Create user
+        try:
+            user = User.objects.create_user(
+                username=username,
+                email=email,
+                password=password
+            )
+            logger.info(f"User created successfully: {username}")
+            
+            # Log the user in
+            login(request, user)
+            
+            if is_ajax:
+                return JsonResponse({
+                    'success': True,
+                    'redirect': '/',
+                    'message': 'Registration successful! Welcome aboard!'
+                })
+            else:
+                messages.success(request, f'Welcome, {username}! Your account has been created.')
+                return redirect('home')
+                
+        except Exception as e:
+            logger.exception(f"Error creating user: {e}")
+            if is_ajax:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'An error occurred during registration. Please try again.'
+                }, status=500)
+            else:
+                messages.error(request, 'An error occurred during registration. Please try again.')
+                return render(request, 'WebChessStats/register.html')
+    
+    # GET request - show registration page
+    logger.info("Rendering registration page (GET request)")
+    return render(request, 'WebChessStats/register.html')
 
 # ============ PROTECTED VIEWS ============
 @login_required
@@ -160,11 +281,11 @@ def stats_view(request):
 @require_http_methods(["DELETE"])
 @csrf_protect
 def delete_all_games_direct(request):
-    """Direct view to delete ALL games - bypasses DRF completely"""
+    """Direct view to delete ALL games for the current user"""
     if request.method == 'DELETE':
         confirm = request.GET.get('confirm', 'false').lower() == 'true'
         
-        total_count = Game.objects.all().count()
+        total_count = Game.objects.filter(user=request.user).count()
         
         if not confirm:
             return JsonResponse({
@@ -173,8 +294,8 @@ def delete_all_games_direct(request):
                 'total_count': total_count
             }, status=400)
         
-        # Delete all games
-        deleted_count = Game.objects.all().delete()[0]
+        # Delete only this user's games
+        deleted_count = Game.objects.filter(user=request.user).delete()[0]
         
         return JsonResponse({
             'success': True,
@@ -197,14 +318,15 @@ class GameViewSet(viewsets.ModelViewSet):
         return GameSerializer
     
     def get_queryset(self):
-        queryset = Game.objects.all()
+        # Filter by the current user
+        queryset = Game.objects.filter(user=self.request.user)
         
         # Filter out soft-deleted by default
         show_deleted = self.request.query_params.get('show_deleted', 'false').lower() == 'true'
         if not show_deleted:
             queryset = queryset.filter(is_active=True)
         
-        # Apply filters
+        # Apply other filters (platform, date, etc.)
         platform = self.request.query_params.get('platform')
         if platform:
             platform_code = 'CH' if platform.lower() == 'chesscom' else 'LI' if platform.lower() == 'lichess' else None
@@ -238,15 +360,17 @@ class GameViewSet(viewsets.ModelViewSet):
         order_by = self.request.query_params.get('order_by', '-date_played')
         valid_sort_fields = ['date_played', 'my_rating', 'move_count', 'opponent_rating']
         
-        # Check if it's a valid field (with or without - prefix)
         field = order_by.lstrip('-')
         if field in valid_sort_fields:
             queryset = queryset.order_by(order_by)
         else:
-            # Default sort
             queryset = queryset.order_by('-date_played')
         
         return queryset
+    
+    def perform_create(self, serializer):
+        """Set the user when creating a new game"""
+        serializer.save(user=self.request.user)
     
     @action(detail=False, methods=['post'], url_path='import')
     def import_games(self, request):
@@ -282,6 +406,8 @@ class GameViewSet(viewsets.ModelViewSet):
                         game_data = ChessComImporter.parse_row(clean_row, username=username)
                         
                         if game_data and game_data.get('result'):
+                            # Add the user to game data
+                            game_data['user'] = request.user.id
                             game_serializer = GameCreateSerializer(data=game_data)
                             if game_serializer.is_valid():
                                 game = game_serializer.save()
@@ -312,7 +438,6 @@ class GameViewSet(viewsets.ModelViewSet):
             
             else:  # lichess
                 pgn_content = file.read().decode('utf-8')
-                # Use the provided username to identify games
                 games = LichessImporter.parse_pgn(pgn_content, username=username)
                 
                 logger.info(f"Parsed {len(games)} games from Lichess PGN for user {username}")
@@ -322,6 +447,8 @@ class GameViewSet(viewsets.ModelViewSet):
                 
                 for idx, game_data in enumerate(games):
                     if game_data and game_data.get('result'):
+                        # Add the user to game data
+                        game_data['user'] = request.user.id
                         game_serializer = GameCreateSerializer(data=game_data)
                         if game_serializer.is_valid():
                             game = game_serializer.save()
@@ -358,9 +485,9 @@ class GameViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'], url_path='stats')
     def statistics(self, request):
-        """Get aggregated statistics for ALL games (ignoring filters)"""
-        # Use a fresh queryset without any filters from get_queryset
-        all_games = Game.objects.filter(is_active=True)
+        """Get aggregated statistics for the current user's games"""
+        # Filter by current user
+        all_games = Game.objects.filter(user=request.user, is_active=True)
         
         # Basic counts
         total_games = all_games.count()
@@ -506,10 +633,10 @@ class GameViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['delete'], url_path='delete-all')
     def delete_all_games(self, request):
-        """Delete ALL games permanently - bypasses soft delete and pagination"""
-        # Use the actual model manager, not the viewset's filtered queryset
-        total_count = Game.objects.all().count()
-        active_count = Game.objects.filter(is_active=True).count()
+        """Delete ALL games for the current user"""
+        # Only delete games belonging to the current user
+        total_count = Game.objects.filter(user=request.user).count()
+        active_count = Game.objects.filter(user=request.user, is_active=True).count()
         
         # Optional: Add a confirmation parameter
         confirm = request.query_params.get('confirm', 'false').lower() == 'true'
@@ -522,9 +649,8 @@ class GameViewSet(viewsets.ModelViewSet):
                 'active_count': active_count
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Hard delete ALL games - completely bypass the model's default manager
-        # This deletes every single game record from the database
-        deleted_count = Game.objects.all().delete()[0]
+        # Delete only this user's games
+        deleted_count = Game.objects.filter(user=request.user).delete()[0]
         
         return Response({
             'success': True,

@@ -1,0 +1,370 @@
+{% extends 'WebChessStats/base.html' %}
+{% load static %}
+
+{% block title %}Register - My Chess Stats{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card shadow-lg border-0 rounded-lg mt-5">
+            <div class="card-header bg-primary text-white text-center py-4">
+                <h3 class="mb-0"><i class="fas fa-chess-queen"></i> My Chess Stats</h3>
+            </div>
+            <div class="card-body p-4">
+                <h4 class="text-center mb-4">Create Your Account</h4>
+                
+                <!-- Django messages -->
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+                
+                <!-- Custom alert divs -->
+                <div id="errorAlert" class="alert alert-danger" style="display: none;"></div>
+                <div id="successAlert" class="alert alert-success" style="display: none;"></div>
+                
+                <!-- Field error container for inline errors -->
+                <div id="fieldErrors"></div>
+                
+                <form method="post" id="registerForm" novalidate>
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label for="username" class="form-label">
+                            <i class="fas fa-user"></i> Username
+                        </label>
+                        <input type="text" class="form-control form-control-lg" 
+                               id="username" name="username" required 
+                               placeholder="Choose a username"
+                               minlength="3">
+                        <div class="invalid-feedback" id="usernameError"></div>
+                        <small class="form-text text-muted">Minimum 3 characters</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="email" class="form-label">
+                            <i class="fas fa-envelope"></i> Email (optional)
+                        </label>
+                        <input type="email" class="form-control form-control-lg" 
+                               id="email" name="email" 
+                               placeholder="Enter your email">
+                        <div class="invalid-feedback" id="emailError"></div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="password" class="form-label">
+                            <i class="fas fa-lock"></i> Password
+                        </label>
+                        <input type="password" class="form-control form-control-lg" 
+                               id="password" name="password" required 
+                               placeholder="Create a password"
+                               minlength="8">
+                        <div class="invalid-feedback" id="passwordError"></div>
+                        <small class="form-text text-muted">
+                            At least 8 characters. Cannot be too common or entirely numeric.
+                        </small>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="password_confirm" class="form-label">
+                            <i class="fas fa-lock"></i> Confirm Password
+                        </label>
+                        <input type="password" class="form-control form-control-lg" 
+                               id="password_confirm" name="password_confirm" required 
+                               placeholder="Confirm your password">
+                        <div class="invalid-feedback" id="passwordConfirmError"></div>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg" id="registerButton">
+                            <span class="spinner-border spinner-border-sm me-2" role="status" style="display: none;" id="registerSpinner"></span>
+                            <i class="fas fa-user-plus" id="registerIcon"></i> Create Account
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="card-footer text-center py-3 bg-light">
+                <div class="mb-2">
+                    <small class="text-muted">Already have an account?</small>
+                </div>
+                <a href="{% url 'login' %}" class="btn btn-outline-primary btn-sm">
+                    <i class="fas fa-sign-in-alt"></i> Sign In
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Password Strength Indicator -->
+<div class="modal fade" id="passwordHelpModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">Password Requirements</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <ul class="list-unstyled">
+                    <li class="mb-2"><i class="fas fa-check-circle text-success"></i> At least 8 characters long</li>
+                    <li class="mb-2"><i class="fas fa-check-circle text-success"></i> Can't be too similar to your other personal information</li>
+                    <li class="mb-2"><i class="fas fa-check-circle text-success"></i> Can't be a commonly used password</li>
+                    <li class="mb-2"><i class="fas fa-check-circle text-success"></i> Can't be entirely numeric</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Helper function to get CSRF token
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+// Wait for DOM to be fully loaded
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, initializing registration form...');
+    
+    const registerForm = document.getElementById('registerForm');
+    const errorAlert = document.getElementById('errorAlert');
+    const successAlert = document.getElementById('successAlert');
+    const spinner = document.getElementById('registerSpinner');
+    const icon = document.getElementById('registerIcon');
+    const button = document.getElementById('registerButton');
+    
+    // Get all input fields
+    const usernameInput = document.getElementById('username');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const passwordConfirmInput = document.getElementById('password_confirm');
+    
+    // Clear field errors when user starts typing
+    function clearFieldError(fieldId) {
+        const field = document.getElementById(fieldId);
+        const errorDiv = document.getElementById(fieldId + 'Error');
+        if (field) {
+            field.classList.remove('is-invalid');
+        }
+        if (errorDiv) {
+            errorDiv.textContent = '';
+            errorDiv.style.display = 'none';
+        }
+    }
+    
+    usernameInput.addEventListener('input', () => clearFieldError('username'));
+    emailInput.addEventListener('input', () => clearFieldError('email'));
+    passwordInput.addEventListener('input', () => {
+        clearFieldError('password');
+        // Real-time password match check
+        if (passwordConfirmInput.value) {
+            if (passwordInput.value !== passwordConfirmInput.value) {
+                passwordConfirmInput.classList.add('is-invalid');
+                document.getElementById('passwordConfirmError').textContent = 'Passwords do not match';
+                document.getElementById('passwordConfirmError').style.display = 'block';
+            } else {
+                passwordConfirmInput.classList.remove('is-invalid');
+                document.getElementById('passwordConfirmError').style.display = 'none';
+            }
+        }
+    });
+    passwordConfirmInput.addEventListener('input', () => {
+        clearFieldError('password_confirm');
+        if (passwordInput.value !== passwordConfirmInput.value) {
+            passwordConfirmInput.classList.add('is-invalid');
+            document.getElementById('passwordConfirmError').textContent = 'Passwords do not match';
+            document.getElementById('passwordConfirmError').style.display = 'block';
+        } else {
+            passwordConfirmInput.classList.remove('is-invalid');
+            document.getElementById('passwordConfirmError').style.display = 'none';
+        }
+    });
+    
+    function setLoading(isLoading) {
+        if (spinner && icon && button) {
+            spinner.style.display = isLoading ? 'inline-block' : 'none';
+            icon.style.display = isLoading ? 'none' : 'inline-block';
+            button.disabled = isLoading;
+        }
+    }
+    
+    function showError(message) {
+        console.error('Error:', message);
+        if (errorAlert) {
+            errorAlert.textContent = message;
+            errorAlert.style.display = 'block';
+            // Hide success alert if showing
+            if (successAlert) {
+                successAlert.style.display = 'none';
+            }
+            setTimeout(() => {
+                errorAlert.style.display = 'none';
+            }, 5000);
+        } else {
+            alert('Error: ' + message);
+        }
+    }
+    
+    function showSuccess(message) {
+        console.log('Success:', message);
+        if (successAlert) {
+            successAlert.textContent = message;
+            successAlert.style.display = 'block';
+            // Hide error alert if showing
+            if (errorAlert) {
+                errorAlert.style.display = 'none';
+            }
+            // Auto-hide after 3 seconds
+            setTimeout(() => {
+                successAlert.style.display = 'none';
+            }, 3000);
+        }
+    }
+    
+    function showFieldErrors(errors) {
+        // Clear all previous field errors
+        document.querySelectorAll('.is-invalid').forEach(field => {
+            field.classList.remove('is-invalid');
+        });
+        document.querySelectorAll('[id$="Error"]').forEach(div => {
+            div.textContent = '';
+            div.style.display = 'none';
+        });
+        
+        // Show new field errors
+        for (let field in errors) {
+            const fieldElement = document.getElementById(field);
+            const errorDiv = document.getElementById(field + 'Error');
+            
+            if (fieldElement && errorDiv) {
+                fieldElement.classList.add('is-invalid');
+                errorDiv.textContent = errors[field];
+                errorDiv.style.display = 'block';
+            } else {
+                // If field doesn't exist, show in general error
+                showError(errors[field]);
+            }
+        }
+    }
+    
+    registerForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        console.log('Registration form submitted');
+        
+        // Hide any existing alerts
+        if (errorAlert) errorAlert.style.display = 'none';
+        if (successAlert) successAlert.style.display = 'none';
+        
+        // Clear field errors
+        document.querySelectorAll('.is-invalid').forEach(field => {
+            field.classList.remove('is-invalid');
+        });
+        document.querySelectorAll('[id$="Error"]').forEach(div => {
+            div.textContent = '';
+            div.style.display = 'none';
+        });
+        
+        setLoading(true);
+        
+        const username = usernameInput.value;
+        const email = emailInput.value;
+        const password = passwordInput.value;
+        const password_confirm = passwordConfirmInput.value;
+        
+        console.log('Attempting registration for username:', username);
+        
+        // Basic client-side validation
+        if (password !== password_confirm) {
+            showFieldErrors({
+                'password_confirm': 'Passwords do not match'
+            });
+            setLoading(false);
+            return;
+        }
+        
+        if (password.length < 8) {
+            showFieldErrors({
+                'password': 'Password must be at least 8 characters'
+            });
+            setLoading(false);
+            return;
+        }
+        
+        try {
+            const response = await fetch('/register/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken'),
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    username: username,
+                    email: email,
+                    password: password,
+                    password_confirm: password_confirm
+                }),
+                credentials: 'same-origin'
+            });
+            
+            console.log('Response status:', response.status);
+            
+            // Check if response is JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                console.error('Non-JSON response:', text.substring(0, 200));
+                throw new Error('Server returned non-JSON response. Check server logs.');
+            }
+            
+            const data = await response.json();
+            console.log('Response data:', data);
+            
+            if (response.ok && data.success) {
+                console.log('Registration successful');
+                showSuccess('Registration successful! Welcome aboard!');
+                
+                // Clear form
+                registerForm.reset();
+                
+                // Redirect after showing success message
+                setTimeout(() => {
+                    window.location.href = data.redirect || '/';
+                }, 1500);  // Give user time to see success message
+            } else {
+                console.error('Registration failed:', data.errors || data.error);
+                
+                if (data.errors) {
+                    // Field-specific errors
+                    showFieldErrors(data.errors);
+                } else {
+                    // General error
+                    showError(data.error || 'Registration failed. Please try again.');
+                }
+                setLoading(false);
+            }
+        } catch (error) {
+            console.error('Registration error:', error);
+            showError(error.message || 'An error occurred during registration. Please try again.');
+            setLoading(false);
+        }
+    });
+});
+</script>
+{% endblock %}

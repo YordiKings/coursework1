@@ -3,11 +3,13 @@ from .models import Game
 
 @admin.register(Game)
 class GameAdmin(admin.ModelAdmin):
-    list_display = ['id', 'date_played', 'white_player', 'black_player', 
-                   'result', 'opening', 'platform']
-    list_filter = ['platform', 'result', 'time_class', 'my_color', 'date_played']
-    search_fields = ['white_player', 'black_player', 'opponent_name', 'opening']
+    list_display = ['id', 'user', 'date_played', 'white_player', 'black_player', 
+                   'result', 'opening', 'platform', 'is_active']
+    list_filter = ['platform', 'result', 'time_class', 'my_color', 'date_played', 'is_active', 'user']
+    search_fields = ['white_player', 'black_player', 'opponent_name', 'opening', 'user__username']
     readonly_fields = ['created_at', 'updated_at']
+    date_hierarchy = 'date_played'
+    list_per_page = 50
     
     fieldsets = (
         ('Basic Info', {

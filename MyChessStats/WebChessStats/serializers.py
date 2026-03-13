@@ -11,7 +11,7 @@ class GameSerializer(serializers.ModelSerializer):
     class Meta:
         model = Game
         fields = '__all__'
-        read_only_fields = ['created_at', 'updated_at', 'id']
+        read_only_fields = ['created_at', 'updated_at', 'id', 'user']  # Add user here
     
     def get_opponent(self, obj):
         return obj.get_opponent()
@@ -48,6 +48,7 @@ class GameCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Game
         exclude = ['created_at', 'updated_at', 'moves_with_eval']
+        read_only_fields = ['user']  # Make user read-only
 
 class GameImportSerializer(serializers.Serializer):
     """Serializer for bulk import from CSV/PGN"""

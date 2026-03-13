@@ -54,8 +54,16 @@
                 </form>
             </div>
             <div class="card-footer text-center py-3 bg-light">
-                <small class="text-muted">Track and analyze your chess games</small>
-            </div>
+    <div class="mb-2">
+        <small class="text-muted">Don't have an account?</small>
+    </div>
+    <a href="{% url 'register' %}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-user-plus"></i> Create Account
+    </a>
+    <div class="mt-2">
+        <small class="text-muted">Track and analyze your chess games</small>
+    </div>
+</div>
         </div>
     </div>
 </div>

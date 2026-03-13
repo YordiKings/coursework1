@@ -7,9 +7,9 @@
     <div class="col-12">
         <div class="jumbotron bg-light p-5 rounded">
             <h1 class="display-4">Welcome to My Chess Stats!</h1>
-            <p class="lead">Track, analyze, and improve your chess games from Chess.com and Lichess.</p>
+            <p class="lead">Coursework 1: Chess statistics from games on Chess.com and Lichess.</p>
             <hr class="my-4">
-            <p>Import your games, view statistics, and analyze your performance over time.</p>
+            <p>Import games, view statistics, and analyze performance over time.</p>
             <div class="d-flex gap-2">
                 <a class="btn btn-primary btn-lg" href="{% url 'import_games' %}" role="button">
                     <i class="fas fa-upload"></i> Import Games
@@ -81,44 +81,12 @@
         </div>
     </div>
 </div>
-
-<!-- Recent Games -->
-<div class="row">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Recent Games</h5>
-                <a href="{% url 'game_list' %}" class="btn btn-sm btn-outline-primary">View All</a>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>White</th>
-                                <th>Black</th>
-                                <th>Result</th>
-                                <th>Opening</th>
-                                <th>Time Control</th>
-                            </tr>
-                        </thead>
-                        <tbody id="recentGames">
-                            <tr><td colspan="6" class="text-center">Loading...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     loadQuickStats();
-    loadRecentGames();
 });
 
 function loadQuickStats() {
@@ -137,38 +105,6 @@ function loadQuickStats() {
             createTimeControlChart(data.by_time_class);
         })
         .catch(error => console.error('Error loading stats:', error));
-}
-
-function loadRecentGames() {
-    fetch('/api/games/?order_by=-date_played&limit=10')
-        .then(response => response.json())
-        .then(data => {
-            const tbody = document.getElementById('recentGames');
-            tbody.innerHTML = '';
-            
-            if (data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No games found</td></tr>';
-                return;
-            }
-            
-            data.forEach(game => {
-                const resultClass = game.result === 'W' ? 'win-text' : 
-                                   game.result === 'L' ? 'loss-text' : 'draw-text';
-                
-                const row = `
-                    <tr onclick="window.location='/game/${game.id}/'" style="cursor: pointer;">
-                        <td>${game.date_played}</td>
-                        <td>${game.white_player}</td>
-                        <td>${game.black_player}</td>
-                        <td class="${resultClass} fw-bold">${game.result_display}</td>
-                        <td>${game.opening || 'Unknown'}</td>
-                        <td>${game.time_class}</td>
-                    </tr>
-                `;
-                tbody.innerHTML += row;
-            });
-        })
-        .catch(error => console.error('Error loading games:', error));
 }
 
 function createPlatformChart(platformData) {
