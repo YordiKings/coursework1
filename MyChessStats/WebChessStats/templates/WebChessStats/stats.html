@@ -44,33 +44,37 @@
     </div>
 </div>
 
-<!-- Rating Progression Chart -->
+<!-- Rating Progression Charts -->
 <div class="row mb-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h5>Rating Progression</h5>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fab fa-chess"></i> Chess.com Rating Progression</h5>
             </div>
             <div class="card-body">
-                <canvas id="ratingChart" style="height: 400px;"></canvas>
+                <canvas id="chesscomRatingChart" style="height: 300px; width: 100%;"></canvas>
+                <div id="chesscomNoData" class="text-center text-muted mt-3" style="display: none;">
+                    No Chess.com rating data available
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="fas fa-chess-knight"></i> Lichess Rating Progression</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="lichessRatingChart" style="height: 300px; width: 100%;"></canvas>
+                <div id="lichessNoData" class="text-center text-muted mt-3" style="display: none;">
+                    No Lichess rating data available
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Monthly Stats Chart -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h5>Monthly Performance</h5>
-            </div>
-            <div class="card-body">
-                <canvas id="monthlyChart" style="height: 300px;"></canvas>
-            </div>
-        </div>
-    </div>
-</div>
+
 
 <!-- Top Openings -->
 <div class="row">
@@ -108,118 +112,114 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function loadStats() {
+    console.log('Loading statistics...');
+    
     fetch('/api/games/stats/')
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
-            // Update summary cards
-            document.getElementById('totalGames').textContent = data.total_games;
-            document.getElementById('totalWins').textContent = data.wins;
-            document.getElementById('totalLosses').textContent = data.losses;
-            document.getElementById('totalDraws').textContent = data.draws;
+            console.log('Stats data received:', data);
             
-            // Create charts
-            createRatingChart(data.rating_progression);
-            createMonthlyChart(data.monthly_stats);
+            // Update summary cards
+            document.getElementById('totalGames').textContent = data.total_games || 0;
+            document.getElementById('totalWins').textContent = data.wins || 0;
+            document.getElementById('totalLosses').textContent = data.losses || 0;
+            document.getElementById('totalDraws').textContent = data.draws || 0;
+            
+            // Create platform-specific rating charts
+            createRatingChart('chesscomRatingChart', data.chesscom_rating || [], 'Chess.com Rating');
+            createRatingChart('lichessRatingChart', data.lichess_rating || [], 'Lichess Rating');
             
             // Show openings
-            renderOpenings(data.top_openings);
+            renderOpenings(data.top_openings || []);
         })
-        .catch(error => console.error('Error loading stats:', error));
+        .catch(error => {
+            console.error('Error loading stats:', error);
+            
+            // Show error in summary cards
+            document.getElementById('totalGames').textContent = 'Error';
+            document.getElementById('totalWins').textContent = 'Error';
+            document.getElementById('totalLosses').textContent = 'Error';
+            document.getElementById('totalDraws').textContent = 'Error';
+            
+            // Show error in openings table
+            document.getElementById('openingsTable').innerHTML = 
+                '<tr><td colspan="4" class="text-center text-danger">Error loading statistics. Please try again.</td></tr>';
+        });
 }
 
-function createRatingChart(ratingData) {
-    const ctx = document.getElementById('ratingChart').getContext('2d');
+function createRatingChart(canvasId, ratingData, label) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    const noDataDiv = document.getElementById(canvasId.replace('Chart', 'NoData'));
     
     if (!ratingData || ratingData.length === 0) {
-        ctx.font = '16px Arial';
-        ctx.fillText('No rating data available', 50, 200);
+        canvas.style.display = 'none';
+        if (noDataDiv) noDataDiv.style.display = 'block';
         return;
     }
     
-    const dates = ratingData.map(d => d.date_played);
+    canvas.style.display = 'block';
+    if (noDataDiv) noDataDiv.style.display = 'none';
+    
+    console.log(`${label} data:`, ratingData);
+    
+    const dates = ratingData.map(d => d.date || 'Unknown');
     const ratings = ratingData.map(d => d.my_rating);
+    
+    // Destroy existing chart if it exists
+    const existingChart = Chart.getChart(canvasId);
+    if (existingChart) {
+        existingChart.destroy();
+    }
     
     new Chart(ctx, {
         type: 'line',
         data: {
             labels: dates,
             datasets: [{
-                label: 'My Rating',
+                label: label,
                 data: ratings,
-                borderColor: 'rgb(75, 192, 192)',
-                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                borderColor: canvasId.includes('chesscom') ? 'rgb(54, 162, 235)' : 'rgb(40, 167, 69)',
+                backgroundColor: canvasId.includes('chesscom') ? 'rgba(54, 162, 235, 0.1)' : 'rgba(40, 167, 69, 0.1)',
                 tension: 0.1,
-                fill: true
+                fill: true,
+                pointBackgroundColor: ratings.map((r, i) => {
+                    if (i > 0) {
+                        return r > ratings[i-1] ? 'green' : r < ratings[i-1] ? 'red' : 'gray';
+                    }
+                    return 'blue';
+                }),
+                pointRadius: 5,
+                pointHoverRadius: 7
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { display: true }
+                legend: { display: true },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `Rating: ${context.raw}`;
+                        }
+                    }
+                }
             },
             scales: {
                 y: {
                     beginAtZero: false,
                     title: { display: true, text: 'Rating' }
-                }
-            }
-        }
-    });
-}
-
-function createMonthlyChart(monthlyStats) {
-    const ctx = document.getElementById('monthlyChart').getContext('2d');
-    
-    if (!monthlyStats || monthlyStats.length === 0) {
-        ctx.font = '16px Arial';
-        ctx.fillText('No monthly data available', 50, 150);
-        return;
-    }
-    
-    const months = monthlyStats.map(m => m.month);
-    const games = monthlyStats.map(m => m.count);
-    const winRates = monthlyStats.map(m => m.win_percentage);
-    
-    new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: months,
-            datasets: [
-                {
-                    label: 'Games Played',
-                    data: games,
-                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    borderWidth: 1,
-                    yAxisID: 'y'
                 },
-                {
-                    label: 'Win Rate %',
-                    data: winRates,
-                    type: 'line',
-                    borderColor: 'rgba(255, 99, 132, 1)',
-                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                    tension: 0.4,
-                    yAxisID: 'y1'
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    title: { display: true, text: 'Games' },
-                    position: 'left'
-                },
-                y1: {
-                    beginAtZero: true,
-                    max: 100,
-                    title: { display: true, text: 'Win Rate %' },
-                    position: 'right',
-                    grid: { drawOnChartArea: false }
+                x: {
+                    title: { display: true, text: 'Quarter' }
                 }
             }
         }
@@ -229,22 +229,32 @@ function createMonthlyChart(monthlyStats) {
 function renderOpenings(openings) {
     const tbody = document.getElementById('openingsTable');
     
+    console.log('Openings data:', openings);
+    
     if (!openings || openings.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center">No opening data available</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No opening data available yet. Import more games to see opening statistics.</td></tr>';
         return;
     }
     
     tbody.innerHTML = '';
     openings.forEach(opening => {
+        const winRate = opening.win_percentage || 0;
+        const barColor = winRate >= 60 ? 'bg-success' : winRate >= 40 ? 'bg-warning' : 'bg-danger';
+        
         const row = `
             <tr>
-                <td>${opening.opening || 'Unknown'}</td>
-                <td>${opening.count}</td>
-                <td>${opening.wins}</td>
-                <td>
-                    <div class="progress">
-                        <div class="progress-bar bg-success" style="width: ${opening.win_percentage}%">
-                            ${opening.win_percentage}%
+                <td>${opening.opening || 'Unknown Opening'}</td>
+                <td class="text-center">${opening.count}</td>
+                <td class="text-center">${opening.wins}</td>
+                <td style="width: 200px;">
+                    <div class="progress" style="height: 20px;">
+                        <div class="progress-bar ${barColor}" 
+                             style="width: ${winRate}%;" 
+                             role="progressbar" 
+                             aria-valuenow="${winRate}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                            ${winRate.toFixed(1)}%
                         </div>
                     </div>
                 </td>

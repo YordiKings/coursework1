@@ -54,7 +54,15 @@ class ChessComImporter:
     
     @classmethod
     def parse_row(cls, row, username=None):
-        """Parse a single CSV row into Game model data"""
+        """Parse a single CSV row into Game model data
+        
+        Logic:
+        - If result is 'win' -> WIN for me
+        - If result is 'checkmated' -> LOSS for me
+        - If result is draw type -> DRAW
+        - If result is 'resigned', 'timeout', 'abandoned' -> LOSS for me (since they're not wins)
+        - wonBy column only has data when it's a win
+        """
         
         # Get basic info
         game_result = row.get('result', '').lower()
@@ -62,35 +70,42 @@ class ChessComImporter:
         outcome = row.get('outcome', '').lower() if row.get('outcome') else ''
         user_color = row.get('userColor', '').lower()
         
-        # Determine result and win method
+        print(f"Parsing row - Result: {game_result}, WonBy: {won_by}, UserColor: {user_color}")
+        
+        # Determine result based on clear logic
         if game_result == 'win':
+            # If result is 'win', I won
             result_code = 'W'
             win_method = cls.WIN_METHOD_MAP.get(won_by if won_by else outcome, 'OTH')
+            print(f"  -> Win for me via {win_method}")
+            
         elif game_result == 'checkmated':
+            # If result is 'checkmated', I lost
             result_code = 'L'
             win_method = cls.WIN_METHOD_MAP.get('checkmate', 'CHM')
+            print(f"  -> Loss for me via checkmate")
+            
         elif game_result in ['stalemate', 'repetition', 'insufficient', 'agreed', 'timevsinsufficient']:
+            # Draw results
             result_code = 'D'
             win_method = cls.WIN_METHOD_MAP.get(game_result, 'OTH')
+            print(f"  -> Draw via {game_result}")
+            
         elif game_result in ['resigned', 'timeout', 'abandoned']:
-            # For these, the result column tells us who won
-            if user_color == 'white' and game_result == 'resigned':
-                result_code = 'W'
-            elif user_color == 'black' and game_result == 'resigned':
-                result_code = 'W'
-            else:
-                result_code = 'L'
+            # These are always losses for me (since they're not wins)
+            result_code = 'L'
             win_method = cls.WIN_METHOD_MAP.get(game_result, 'OTH')
+            print(f"  -> Loss for me via {game_result}")
+            
         else:
+            print(f"  -> Unknown result: {game_result}")
             result_code = None
             win_method = None
         
-        # Parse players - handle missing usernames
-        
+        # Parse players - use provided username
         opponent = row.get('opponent', '')
+        user_name = username or 'Me'  # Use logged-in username or fallback
         
-        user_name = username or 'Me'  # Fallback to 'Me' if no username provided
-    
         white_player = user_name if user_color == 'white' else opponent
         black_player = opponent if user_color == 'white' else user_name
         
@@ -110,15 +125,19 @@ class ChessComImporter:
         start_time = cls.parse_time(row.get('startTime', ''))
         end_time = cls.parse_time(row.get('endTime', ''))
         
-        # Parse move count - IMPORTANT: handle the case where moveCount contains "resigned"
+        # Parse move count
         move_count_str = row.get('moveCount', '')
         move_count = None
-        if move_count_str and move_count_str.strip().isdigit():
-            move_count = int(move_count_str.strip())
+        
+        if move_count_str and move_count_str.strip():
+            try:
+                move_count = int(float(move_count_str.strip()))
+            except (ValueError, TypeError):
+                pass
         
         # Build game data
         game_data = {
-            'platform': 'CH',  # Chess.com
+            'platform': 'CH',
             'game_id': row.get('gameId', '').strip(),
             'game_url': row.get('gameUrl', '').strip(),
             'date_played': date_played or datetime.now().date(),
@@ -140,7 +159,7 @@ class ChessComImporter:
             'opening': row.get('opening', '').strip(),
             'opening_url': row.get('openingUrl', '').strip(),
             'fen': row.get('fen', '').strip(),
-            'move_count': move_count,  # Now properly handles non-numeric values
+            'move_count': move_count,
             'my_accuracy': cls.parse_float(row.get('userAccuracy')),
             'opponent_accuracy': cls.parse_float(row.get('opponentAccuracy')),
             'is_active': True,

@@ -358,15 +358,110 @@ class GameViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'], url_path='stats')
     def statistics(self, request):
-        """Get aggregated statistics"""
-        queryset = self.get_queryset()
+        """Get aggregated statistics for ALL games (ignoring filters)"""
+        # Use a fresh queryset without any filters from get_queryset
+        all_games = Game.objects.filter(is_active=True)
         
-        total_games = queryset.count()
-        wins = queryset.filter(result=Game.Result.WIN).count()
-        losses = queryset.filter(result=Game.Result.LOSS).count()
-        draws = queryset.filter(result=Game.Result.DRAW).count()
+        # Basic counts
+        total_games = all_games.count()
+        wins = all_games.filter(result=Game.Result.WIN).count()
+        losses = all_games.filter(result=Game.Result.LOSS).count()
+        draws = all_games.filter(result=Game.Result.DRAW).count()
         
+        # Win percentage
         win_pct = (wins / total_games * 100) if total_games > 0 else 0
+        
+        # Statistics by platform
+        platform_stats = []
+        chesscom_rating_data = []
+        lichess_rating_data = []
+        
+        for platform_code, platform_name in Game.Platform.choices:
+            platform_qs = all_games.filter(platform=platform_code)
+            count = platform_qs.count()
+            if count > 0:
+                platform_stats.append({
+                    'platform': platform_name,
+                    'code': platform_code,
+                    'count': count,
+                    'wins': platform_qs.filter(result=Game.Result.WIN).count(),
+                    'avg_rating': platform_qs.filter(my_rating__isnull=False).aggregate(
+                        avg=models.Avg('my_rating')
+                    )['avg']
+                })
+                
+                # Get rating progression for this platform
+                rated_games = platform_qs.filter(
+                    my_rating__isnull=False
+                ).order_by('date_played', 'id')
+                
+                # Group by 3-month periods
+                rating_data = list(rated_games.values('date_played', 'my_rating'))
+                
+                from collections import defaultdict
+                import datetime
+                
+                quarterly_ratings = defaultdict(list)
+                
+                for item in rating_data:
+                    if item['date_played']:
+                        date = item['date_played']
+                        quarter = f"{date.year}-Q{(date.month-1)//3 + 1}"
+                        quarterly_ratings[quarter].append({
+                            'date': date,
+                            'rating': item['my_rating']
+                        })
+                
+                # For each quarter, take the rating from the last game
+                platform_progression = []
+                for quarter, games in sorted(quarterly_ratings.items()):
+                    if games:
+                        last_game = sorted(games, key=lambda x: x['date'])[-1]
+                        
+                        year = int(quarter.split('-')[0])
+                        q_num = int(quarter.split('-Q')[1])
+                        last_month = q_num * 3
+                        
+                        display_date = datetime.date(year, last_month, 1)
+                        
+                        platform_progression.append({
+                            'date': display_date.strftime('%Y-%m'),
+                            'my_rating': last_game['rating'],
+                            'quarter': quarter
+                        })
+                
+                # Store platform-specific data
+                if platform_code == 'CH':
+                    chesscom_rating_data = platform_progression[-20:]  # Last 20 quarters
+                elif platform_code == 'LI':
+                    lichess_rating_data = platform_progression[-20:]
+        
+        # Statistics by time class
+        time_stats = []
+        for time_class, time_name in Game.TimeClass.choices:
+            time_qs = all_games.filter(time_class=time_class)
+            count = time_qs.count()
+            if count > 0:
+                time_stats.append({
+                    'time_class': time_name,
+                    'code': time_class,
+                    'count': count,
+                    'wins': time_qs.filter(result=Game.Result.WIN).count(),
+                    'win_percentage': round(
+                        time_qs.filter(result=Game.Result.WIN).count() / count * 100, 2
+                    ) if count > 0 else 0
+                })
+        
+        # Statistics by opening (top 15)
+        top_openings = all_games.values('opening').annotate(
+            count=models.Count('id'),
+            wins=models.Count('id', filter=models.Q(result=Game.Result.WIN))
+        ).exclude(opening='').exclude(opening='Undefined').exclude(opening__isnull=True).filter(count__gte=2).order_by('-count')[:15]
+        
+        for opening in top_openings:
+            opening['win_percentage'] = round(
+                opening['wins'] / opening['count'] * 100, 2
+            ) if opening['count'] > 0 else 0
         
         return Response({
             'total_games': total_games,
@@ -374,6 +469,11 @@ class GameViewSet(viewsets.ModelViewSet):
             'losses': losses,
             'draws': draws,
             'win_percentage': round(win_pct, 2),
+            'by_platform': platform_stats,
+            'by_time_class': time_stats,
+            'top_openings': list(top_openings),
+            'chesscom_rating': chesscom_rating_data,
+            'lichess_rating': lichess_rating_data,
         })
     
     @action(detail=True, methods=['get'], url_path='pgn')
@@ -492,3 +592,26 @@ def game_board_view(request, game_id):
             'success': False,
             'error': str(e)
         }, status=500)
+    
+@action(detail=False, methods=['get'], url_path='debug-counts')
+def debug_counts(self, request):
+    """Debug endpoint to check actual game counts"""
+    all_games = Game.objects.filter(is_active=True)
+    
+    # Count by result
+    wins = all_games.filter(result=Game.Result.WIN).count()
+    losses = all_games.filter(result=Game.Result.LOSS).count()
+    draws = all_games.filter(result=Game.Result.DRAW).count()
+    null_results = all_games.filter(result__isnull=True).count()
+    
+    # Sample some games to see their result values
+    samples = list(all_games.values('id', 'result', 'white_player', 'black_player', 'my_color')[:10])
+    
+    return Response({
+        'total': all_games.count(),
+        'wins': wins,
+        'losses': losses,
+        'draws': draws,
+        'null_results': null_results,
+        'samples': samples
+    })    
