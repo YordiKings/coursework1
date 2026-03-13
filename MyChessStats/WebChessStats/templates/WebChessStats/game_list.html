@@ -6,16 +6,16 @@
 <div class="row mb-4">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center">
-            <h2><i class="fas fa-list"></i> My Games</h2>
-            <div>
-                <a href="{% url 'import_games' %}" class="btn btn-primary">
-                    <i class="fas fa-upload"></i> Import Games
-                </a>
-                <a href="{% url 'game_create' %}" class="btn btn-success">
-                    <i class="fas fa-plus"></i> Add Manual
-                </a>
-            </div>
-        </div>
+    <h2><i class="fas fa-list"></i> My Games</h2>
+    <div>
+        <a href="{% url 'import_games' %}" class="btn btn-primary">
+            <i class="fas fa-upload"></i> Import Games
+        </a>
+        <button class="btn btn-danger" onclick="showDeleteAllModal()">
+            <i class="fas fa-trash-alt"></i> Delete All
+        </button>
+    </div>
+</div>
     </div>
 </div>
 
@@ -78,12 +78,14 @@
                         <th>White</th>
                         <th>Black</th>
                         <th>Result</th>
-                        <th>My Rating</th>
+                        <th onclick="sortGames('my_rating')" style="cursor: pointer;">
+                            My Rating <i class="fas fa-sort"></i>
+                        </th>
                         <th>Opponent</th>
                         <th>Opening</th>
                         <th>Time</th>
                         <th>Actions</th>
-                    </tr>
+                    </tr> 
                 </thead>
                 <tbody id="gamesTableBody">
                     <tr><td colspan="9" class="text-center">Loading...</td></tr>
@@ -113,6 +115,26 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-danger" id="confirmDelete">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Delete All Confirmation Modal -->
+<div class="modal fade" id="deleteAllModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Confirm Delete All</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="fw-bold">Are you sure you want to delete ALL games?</p>
+                <p class="text-danger">This action cannot be undone. All games will be permanently deleted.</p>
+                <p class="text-warning"><small>Consider exporting your data first if needed.</small></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteAll">Delete All Games</button>
             </div>
         </div>
     </div>
@@ -157,7 +179,11 @@ function loadGames() {
     const timeClass = document.getElementById('time_class').value;
     const search = document.getElementById('search').value;
     
-    let url = `/api/games/?page=${currentPage}`;
+    // Get sort parameter from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const orderBy = urlParams.get('order_by') || '-date_played';
+    
+    let url = `/api/games/?page=${currentPage}&order_by=${orderBy}`;
     if (platform) url += `&platform=${platform}`;
     if (result) url += `&result=${result}`;
     if (timeClass) url += `&time_class=${timeClass}`;
@@ -171,6 +197,9 @@ function loadGames() {
             hideLoading();
             renderGames(data.results);
             renderPagination(data);
+            
+            // Update sort indicators in header
+            updateSortIndicators(orderBy);
         })
         .catch(error => {
             hideLoading();
@@ -178,6 +207,24 @@ function loadGames() {
             document.getElementById('gamesTableBody').innerHTML = 
                 '<tr><td colspan="9" class="text-center text-danger">Error loading games</td></tr>';
         });
+}
+
+function updateSortIndicators(orderBy) {
+    // Remove all sort icons
+    document.querySelectorAll('th i.fa-sort, th i.fa-sort-up, th i.fa-sort-down').forEach(icon => {
+        icon.className = 'fas fa-sort';
+    });
+    
+    // Update the sorted column
+    if (orderBy === 'date_played') {
+        document.querySelector('th:nth-child(1) i').className = 'fas fa-sort-up';
+    } else if (orderBy === '-date_played') {
+        document.querySelector('th:nth-child(1) i').className = 'fas fa-sort-down';
+    } else if (orderBy === 'my_rating') {
+        document.querySelector('th:nth-child(5) i').className = 'fas fa-sort-up';
+    } else if (orderBy === '-my_rating') {
+        document.querySelector('th:nth-child(5) i').className = 'fas fa-sort-down';
+    }
 }
 
 function renderGames(games) {
@@ -208,9 +255,6 @@ function renderGames(games) {
                 <div class="btn-group btn-group-sm">
                     <a href="/game/${game.id}/" class="btn btn-outline-info" title="View">
                         <i class="fas fa-eye"></i>
-                    </a>
-                    <a href="/game/${game.id}/edit/" class="btn btn-outline-warning" title="Edit">
-                        <i class="fas fa-edit"></i>
                     </a>
                     <button onclick="showDeleteModal(${game.id})" class="btn btn-outline-danger" title="Delete">
                         <i class="fas fa-trash"></i>
@@ -259,8 +303,18 @@ function changePage(page) {
 }
 
 function sortGames(field) {
-    // Implement sorting
-    console.log('Sort by:', field);
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentOrder = urlParams.get('order_by');
+    
+    let newOrder = field;
+    if (currentOrder === field) {
+        newOrder = '-' + field; // Reverse sort
+    } else if (currentOrder === '-' + field) {
+        newOrder = field;
+    }
+    
+    urlParams.set('order_by', newOrder);
+    window.location.search = urlParams.toString();
 }
 
 function showDeleteModal(gameId) {
@@ -317,5 +371,171 @@ function getCookie(name) {
     }
     return cookieValue;
 }
+function deleteAllGames() {
+    deleteAllModal.hide();
+    showLoading();
+    
+    // Double confirm
+    if (!confirm('This will permanently delete ALL games. Are you sure?')) {
+        hideLoading();
+        return;
+    }
+    
+    // First, get total count
+    fetch('/api/games/?limit=1', {
+        method: 'GET',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        const totalCount = data.count || 0;
+        
+        if (totalCount === 0) {
+            hideLoading();
+            showAlert('No games to delete', 'warning');
+            return;
+        }
+        
+        // Confirm with exact count
+        if (!confirm(`Are you absolutely sure you want to delete all ${totalCount} games?`)) {
+            hideLoading();
+            return;
+        }
+        
+        // Fetch ALL games (get a large limit to ensure we get all)
+        return fetch(`/api/games/?limit=10000`, {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            credentials: 'same-origin'
+        });
+    })
+    .then(response => response.json())
+    .then(data => {
+        const games = data.results || data;
+        
+        if (games.length === 0) {
+            hideLoading();
+            showAlert('No games to delete', 'warning');
+            return;
+        }
+        
+        // Delete games one by one
+        const deletePromises = games.map(game => 
+            fetch(`/api/games/${game.id}/?hard=true`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                credentials: 'same-origin'
+            })
+        );
+        
+        return Promise.all(deletePromises);
+    })
+    .then(results => {
+        if (results) {
+            const successCount = results.filter(r => r && r.ok).length;
+            hideLoading();
+            showAlert(`Successfully deleted ${successCount} games`, 'success');
+            currentPage = 1;
+            loadGames(); // Reload the list
+        }
+    })
+    .catch(error => {
+        hideLoading();
+        console.error('Error deleting games:', error);
+        showAlert('Error deleting games: ' + error.message, 'danger');
+    });
+}
+let deleteAllModal = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    deleteAllModal = new bootstrap.Modal(document.getElementById('deleteAllModal'));
+    loadGames();
+    
+    document.getElementById('filterForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        currentPage = 1;
+        loadGames();
+    });
+    
+    document.getElementById('confirmDelete').addEventListener('click', function() {
+        if (deleteGameId) {
+            deleteGame(deleteGameId);
+        }
+    });
+    
+    document.getElementById('confirmDeleteAll').addEventListener('click', function() {
+        deleteAllGames();
+    });
+});
+
+function showDeleteAllModal() {
+    deleteAllModal.show();
+}
+
+function deleteAllGames() {
+    deleteAllModal.hide();
+    showLoading();
+    
+    fetch('/api/games/?limit=1000', {
+        method: 'GET',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        const games = data.results || data;
+        if (games.length === 0) {
+            hideLoading();
+            alert('No games to delete');
+            return;
+        }
+        
+        // Confirm again with count
+        if (!confirm(`Are you absolutely sure you want to delete all ${games.length} games?`)) {
+            hideLoading();
+            return;
+        }
+        
+        // Delete games one by one (or use bulk delete endpoint)
+        const deletePromises = games.map(game => 
+            fetch(`/api/games/${game.id}/?hard=true`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                credentials: 'same-origin'
+            })
+        );
+        
+        Promise.all(deletePromises)
+            .then(results => {
+                const successCount = results.filter(r => r.ok).length;
+                hideLoading();
+                showAlert(`Successfully deleted ${successCount} games`, 'success');
+                loadGames(); // Reload the list
+            })
+            .catch(error => {
+                hideLoading();
+                console.error('Error deleting games:', error);
+                showAlert('Error deleting games', 'danger');
+            });
+    })
+    .catch(error => {
+        hideLoading();
+        console.error('Error fetching games:', error);
+        showAlert('Error fetching games', 'danger');
+    });
+}
+
 </script>
 {% endblock %}

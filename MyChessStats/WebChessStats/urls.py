@@ -20,7 +20,7 @@ urlpatterns = [
     path('', views.home_view, name='home'),
     path('games/', views.game_list_view, name='game_list'),
     path('game/<int:game_id>/', views.game_detail_view, name='game_detail'),
-    path('game/create/', views.game_create_view, name='game_create'),
     path('import/', views.import_view, name='import_games'),
     path('stats/', views.stats_view, name='stats'),
+    # Removed: game/create/
 ]

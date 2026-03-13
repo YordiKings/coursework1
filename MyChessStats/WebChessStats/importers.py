@@ -53,7 +53,7 @@ class ChessComImporter:
             return None
     
     @classmethod
-    def parse_row(cls, row):
+    def parse_row(cls, row, username=None):
         """Parse a single CSV row into Game model data"""
         
         # Get basic info
@@ -86,9 +86,11 @@ class ChessComImporter:
             win_method = None
         
         # Parse players - handle missing usernames
-        user_name = row.get('userName', '')
+        
         opponent = row.get('opponent', '')
         
+        user_name = username or 'Me'  # Fallback to 'Me' if no username provided
+    
         white_player = user_name if user_color == 'white' else opponent
         black_player = opponent if user_color == 'white' else user_name
         

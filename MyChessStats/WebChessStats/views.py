@@ -1,3 +1,4 @@
+from django.db import models
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
@@ -154,13 +155,7 @@ def game_detail_view(request, game_id):
     return render(request, 'WebChessStats/game_detail.html', {'game_id': game_id})
 
 
-@login_required
-def game_create_view(request):
-    """Create game page view"""
-    if request.method == 'POST':
-        messages.success(request, 'Game created successfully!')
-        return redirect('game_list')
-    return render(request, 'WebChessStats/game_form.html')
+
 
 
 @login_required
@@ -181,10 +176,6 @@ class GameViewSet(viewsets.ModelViewSet):
     ViewSet providing CRUD operations for Chess games.
     Requires authentication for all operations.
     """
-    queryset = Game.objects.all()
-    serializer_class = GameSerializer
-    permission_classes = [IsAuthenticated]
-    
     def get_serializer_class(self):
         if self.action == 'list':
             return GameListSerializer
@@ -220,6 +211,10 @@ class GameViewSet(viewsets.ModelViewSet):
         if result:
             queryset = queryset.filter(result=result.upper())
         
+        time_class = self.request.query_params.get('time_class')
+        if time_class:
+            queryset = queryset.filter(time_class=time_class.lower())
+        
         search = self.request.query_params.get('search')
         if search:
             queryset = queryset.filter(
@@ -227,6 +222,18 @@ class GameViewSet(viewsets.ModelViewSet):
                 models.Q(white_player__icontains=search) |
                 models.Q(black_player__icontains=search)
             )
+        
+        # Handle sorting
+        order_by = self.request.query_params.get('order_by', '-date_played')
+        valid_sort_fields = ['date_played', 'my_rating', 'move_count', 'opponent_rating']
+        
+        # Check if it's a valid field (with or without - prefix)
+        field = order_by.lstrip('-')
+        if field in valid_sort_fields:
+            queryset = queryset.order_by(order_by)
+        else:
+            # Default sort
+            queryset = queryset.order_by('-date_played')
         
         return queryset
     
@@ -244,15 +251,8 @@ class GameViewSet(viewsets.ModelViewSet):
         platform = serializer.validated_data['platform']
         file = serializer.validated_data['file']
         
-        # Get username for Lichess imports
-        username = None
-        if platform == 'lichess':
-            username = serializer.validated_data.get('username')
-            if not username:
-                return Response(
-                    {'error': 'Username is required for Lichess imports'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+        # Get username for both platforms
+        username = serializer.validated_data.get('username', request.user.username)
         
         try:
             if platform == 'chesscom':
@@ -267,7 +267,8 @@ class GameViewSet(viewsets.ModelViewSet):
                 for row_num, row in enumerate(reader, start=2):
                     try:
                         clean_row = {k: v for k, v in row.items() if k and k.strip()}
-                        game_data = ChessComImporter.parse_row(clean_row)
+                        # Pass the username to the parser
+                        game_data = ChessComImporter.parse_row(clean_row, username=username)
                         
                         if game_data and game_data.get('result'):
                             game_serializer = GameCreateSerializer(data=game_data)
@@ -380,3 +381,23 @@ class GameViewSet(viewsets.ModelViewSet):
             'game_id': game.id,
             'platform': game.get_platform_display()
         })
+    @action(detail=False, methods=['delete'], url_path='delete-all')
+    def delete_all(self, request):
+        """Delete all games (requires confirmation)"""
+        # Get confirmation from query param
+        confirm = request.query_params.get('confirm', 'false').lower() == 'true'
+        
+        if not confirm:
+            return Response({
+                'error': 'Confirmation required',
+                'message': 'Use ?confirm=true to delete all games'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        count = Game.objects.filter(is_active=True).count()
+        # Hard delete all games
+        Game.objects.all().delete()
+        
+        return Response({
+            'message': f'Successfully deleted {count} games',
+            'deleted_count': count
+        })  
