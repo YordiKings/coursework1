@@ -100,6 +100,28 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            // Does this cookie string begin with the name we want?
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+// Add this function to ensure CSRF token is included in all fetch requests
+function csrfSafeMethod(method) {
+    // These HTTP methods do not require CSRF protection
+    return (/^(GET|HEAD|OPTIONS|TRACE)$/.test(method));
+}
+
 function importGames(platform) {
     const form = document.getElementById(platform + 'ImportForm');
     const fileInput = document.getElementById(platform + 'File');
@@ -126,7 +148,10 @@ function importGames(platform) {
     formData.append('file', file);
     formData.append('platform', platform);
     
-    // Simulate progress (since fetch doesn't provide upload progress easily)
+    // Get CSRF token
+    const csrftoken = getCookie('csrftoken');
+    
+    // Simulate progress
     let progress = 10;
     const interval = setInterval(() => {
         if (progress < 90) {
@@ -136,14 +161,23 @@ function importGames(platform) {
         }
     }, 500);
     
+    // Create fetch request with proper headers
     fetch('/api/games/import/', {
         method: 'POST',
         body: formData,
         headers: {
-            'X-CSRFToken': getCookie('csrftoken')
-        }
+            'X-CSRFToken': csrftoken,  // This is the key - sending the CSRF token
+        },
+        credentials: 'same-origin'  // This ensures cookies are sent with the request
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => {
+                throw new Error(err.error || JSON.stringify(err));
+            });
+        }
+        return response.json();
+    })
     .then(data => {
         clearInterval(interval);
         progressBar.style.width = '100%';
@@ -157,14 +191,13 @@ function importGames(platform) {
                 </div>
             `;
             
-            // Show imported games
             if (data.imported && data.imported.length > 0) {
                 let html = '<h6>Imported Games:</h6><ul class="list-group">';
                 data.imported.slice(0, 10).forEach(game => {
                     html += `
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Game #${game.id}
-                            <span class="badge bg-primary">${game.opponent}</span>
+                            Game #${game.id} - ${game.opponent || 'Unknown opponent'}
+                            <span class="badge bg-primary">ID: ${game.game_id || 'N/A'}</span>
                         </li>
                     `;
                 });
@@ -174,36 +207,49 @@ function importGames(platform) {
                 html += '</ul>';
                 resultsDiv.innerHTML = html;
             }
-            
-            // Show any errors
-            if (data.errors && data.errors.length > 0) {
-                resultsDiv.innerHTML += `
-                    <div class="alert alert-warning mt-3">
-                        <h6>Errors (${data.errors.length}):</h6>
-                        <ul class="mb-0">
-                            ${data.errors.slice(0, 5).map(e => `<li>Row ${e.row}: ${JSON.stringify(e.errors)}</li>`).join('')}
-                            ${data.errors.length > 5 ? `<li>... and ${data.errors.length - 5} more errors</li>` : ''}
-                        </ul>
-                    </div>
-                `;
-            }
-            
-            // Add button to view games
-            resultsDiv.innerHTML += `
-                <div class="text-center mt-3">
-                    <a href="{% url 'game_list' %}" class="btn btn-success">
-                        <i class="fas fa-eye"></i> View All Games
-                    </a>
-                </div>
-            `;
         } else {
             statusDiv.innerHTML = `
-                <div class="alert alert-danger">
-                    <i class="fas fa-exclamation-circle"></i>
-                    Import failed. No games were imported.
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    No games were imported.
                 </div>
             `;
         }
+        
+        // Show any errors
+        if (data.errors && data.errors.length > 0) {
+            let errorHtml = `
+                <div class="alert alert-danger mt-3">
+                    <h6>Errors (${data.errors.length}):</h6>
+                    <ul class="mb-0" style="max-height: 200px; overflow-y: auto;">
+            `;
+            
+            data.errors.slice(0, 10).forEach(e => {
+                if (e.row) {
+                    errorHtml += `<li><strong>Row ${e.row}:</strong> ${JSON.stringify(e.errors || e.error)}</li>`;
+                } else if (e.game_index !== undefined) {
+                    errorHtml += `<li><strong>Game ${e.game_index}:</strong> ${JSON.stringify(e.errors || e.error)}</li>`;
+                } else {
+                    errorHtml += `<li>${JSON.stringify(e)}</li>`;
+                }
+            });
+            
+            if (data.errors.length > 10) {
+                errorHtml += `<li><em>... and ${data.errors.length - 10} more errors</em></li>`;
+            }
+            
+            errorHtml += '</ul></div>';
+            resultsDiv.innerHTML += errorHtml;
+        }
+        
+        // Add button to view games
+        resultsDiv.innerHTML += `
+            <div class="text-center mt-3">
+                <a href="/games/" class="btn btn-success">
+                    <i class="fas fa-eye"></i> View All Games
+                </a>
+            </div>
+        `;
     })
     .catch(error => {
         clearInterval(interval);
@@ -218,21 +264,6 @@ function importGames(platform) {
             </div>
         `;
     });
-}
-
-function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-            const cookie = cookies[i].trim();
-            if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
-        }
-    }
-    return cookieValue;
 }
 </script>
 {% endblock %}

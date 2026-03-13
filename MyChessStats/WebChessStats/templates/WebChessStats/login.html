@@ -1,0 +1,190 @@
+{% extends 'WebChessStats/base.html' %}
+{% load static %}
+
+{% block title %}Login - My Chess Stats{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card shadow-lg border-0 rounded-lg mt-5">
+            <div class="card-header bg-primary text-white text-center py-4">
+                <h3 class="mb-0"><i class="fas fa-chess-queen"></i> My Chess Stats</h3>
+            </div>
+            <div class="card-body p-4">
+                <h4 class="text-center mb-4">Welcome Back!</h4>
+                
+                <!-- Django messages -->
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+                
+                <!-- Custom alert divs -->
+                <div id="errorAlert" class="alert alert-danger" style="display: none;"></div>
+                <div id="successAlert" class="alert alert-success" style="display: none;"></div>
+                
+                <form method="post" id="loginForm">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="username" class="form-label">
+                            <i class="fas fa-user"></i> Username
+                        </label>
+                        <input type="text" class="form-control form-control-lg" 
+                               id="username" name="username" required 
+                               placeholder="Enter your username" value="yordi">
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">
+                            <i class="fas fa-lock"></i> Password
+                        </label>
+                        <input type="password" class="form-control form-control-lg" 
+                               id="password" name="password" required 
+                               placeholder="Enter your password">
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg" id="loginButton">
+                            <span class="spinner-border spinner-border-sm me-2" role="status" style="display: none;" id="loginSpinner"></span>
+                            <i class="fas fa-sign-in-alt" id="loginIcon"></i> Login
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="card-footer text-center py-3 bg-light">
+                <small class="text-muted">Track and analyze your chess games</small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Helper function to get CSRF token
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+// Wait for DOM to be fully loaded
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, initializing login form...');
+    
+    const loginForm = document.getElementById('loginForm');
+    const errorAlert = document.getElementById('errorAlert');
+    const successAlert = document.getElementById('successAlert');
+    const spinner = document.getElementById('loginSpinner');
+    const icon = document.getElementById('loginIcon');
+    const button = document.getElementById('loginButton');
+    
+    if (!loginForm) {
+        console.error('Login form not found!');
+        return;
+    }
+    
+    function setLoading(isLoading) {
+        if (spinner && icon && button) {
+            spinner.style.display = isLoading ? 'inline-block' : 'none';
+            icon.style.display = isLoading ? 'none' : 'inline-block';
+            button.disabled = isLoading;
+        }
+    }
+    
+    function showError(message) {
+        console.error('Error:', message);
+        if (errorAlert) {
+            errorAlert.textContent = message;
+            errorAlert.style.display = 'block';
+            setTimeout(() => {
+                errorAlert.style.display = 'none';
+            }, 5000);
+        } else {
+            alert('Error: ' + message);
+        }
+    }
+    
+    function showSuccess(message) {
+        if (successAlert) {
+            successAlert.textContent = message;
+            successAlert.style.display = 'block';
+        }
+    }
+    
+    loginForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        console.log('Login form submitted');
+        
+        // Hide any existing alerts
+        if (errorAlert) errorAlert.style.display = 'none';
+        if (successAlert) successAlert.style.display = 'none';
+        
+        setLoading(true);
+        
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        
+        console.log('Attempting login for username:', username);
+        
+        try {
+            const response = await fetch('/login/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken'),
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    username: username,
+                    password: password
+                }),
+                credentials: 'same-origin'
+            });
+            
+            console.log('Response status:', response.status);
+            console.log('Response headers:', [...response.headers.entries()]);
+            
+            // Check if response is JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                console.error('Non-JSON response:', text.substring(0, 200));
+                throw new Error('Server returned non-JSON response. Check server logs.');
+            }
+            
+            const data = await response.json();
+            console.log('Response data:', data);
+            
+            if (response.ok && data.success) {
+                console.log('Login successful');
+                showSuccess('Login successful! Redirecting...');
+                
+                setTimeout(() => {
+                    window.location.href = data.redirect || '/';
+                }, 500);
+            } else {
+                console.error('Login failed:', data.error);
+                showError(data.error || 'Login failed. Please try again.');
+                setLoading(false);
+            }
+        } catch (error) {
+            console.error('Login error:', error);
+            showError(error.message || 'An error occurred during login. Please try again.');
+            setLoading(false);
+        }
+    });
+});
+</script>
+{% endblock %}
