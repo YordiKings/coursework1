@@ -1,6 +1,13 @@
 from rest_framework import serializers
 from .models import Game
 import json
+from django.contrib.auth.models import User 
+
+import logging
+
+
+
+
 
 class GameSerializer(serializers.ModelSerializer):
     """Full Game serializer for CRUD operations"""
@@ -27,12 +34,9 @@ class GameSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         """Log what's being saved"""
-        logger = logging.getLogger(__name__)
-        logger.info(f"GameCreateSerializer.create called with user_id: {validated_data.get('user')}")
         
         # Ensure user is present
         if 'user' not in validated_data or validated_data['user'] is None:
-            logger.error("CRITICAL: Attempting to create game without user!")
             raise serializers.ValidationError({"user": "User is required for game creation"})
         
         return super().create(validated_data)
@@ -49,7 +53,6 @@ class GameSerializer(serializers.ModelSerializer):
         if value and value < 0:
             raise serializers.ValidationError("Move count cannot be negative")
         return value
-
 class GameListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for list views"""
     opponent = serializers.SerializerMethodField()
@@ -71,8 +74,36 @@ class GameCreateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Game
-        exclude = ['created_at', 'updated_at', 'moves_with_eval']
-        read_only_fields = ['user']  # Make user read-only
+        fields = '__all__'
+        extra_kwargs = {
+            'user': {'required': True, 'allow_null': False},
+        }
+    
+    def validate_user(self, value):
+        """Validate that user ID exists"""
+        
+        # If it's already a User instance, return it
+        if isinstance(value, User):
+            return value
+        
+        # If it's an integer or string that can be converted to int
+        try:
+            # Try to convert to int if it's a string
+            if isinstance(value, str):
+                value = int(value)
+            
+            user = User.objects.get(id=value)
+            return user
+        except (ValueError, TypeError) as e:
+            raise serializers.ValidationError(f"Invalid user ID: {value}")
+        except User.DoesNotExist:
+            raise serializers.ValidationError(f"User with id {value} does not exist")
+    
+    def create(self, validated_data):
+        return super().create(validated_data)
+    
+    def validate(self, data):
+        return data
 
 class GameImportSerializer(serializers.Serializer):
     """Serializer for bulk import from CSV/PGN"""

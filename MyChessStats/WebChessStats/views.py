@@ -14,8 +14,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .models import Game
-from .serializers import (
-    GameSerializer, GameListSerializer, 
+from .serializers import (GameSerializer,
+    GameListSerializer, 
     GameCreateSerializer, GameImportSerializer
 )
 from .importers import ChessComImporter, LichessImporter
@@ -420,8 +420,8 @@ class GameViewSet(viewsets.ModelViewSet):
                     row_count += 1
                     
                     # Log every 100 rows to avoid log spam
-                    #if row_count % 100 == 0:
-                        #logger.info(f"Processed {row_count} rows...")
+                    if row_count % 100 == 0:
+                        logger.info(f"Processed {row_count} rows...")
                     
                     try:
                         clean_row = {k: v for k, v in row.items() if k and k.strip()}
@@ -433,22 +433,30 @@ class GameViewSet(viewsets.ModelViewSet):
                         game_data = ChessComImporter.parse_row(clean_row, username=username)
                         
                         if game_data and game_data.get('result'):
-                            # CRITICAL: Add the current user to game data
-                            game_data['user'] = request.user.id
+                            # ===== CRITICAL: Set user as ID (integer) =====
                             games_with_user_set += 1
                             
-                            # Log user assignment for first few games
-                            if row_count <= 5:
-                                logger.info(f"Row {row_count}: Setting user_id={request.user.id} for game {game_data.get('game_id')}")
-                                logger.debug(f"Game data keys for row {row_count}: {list(game_data.keys())}")
+                            # Log before setting user
+                            logger.info(f"Row {row_num}: Setting user ID to {request.user.id}")
                             
-                            game_serializer = GameCreateSerializer(data=game_data, context={'request': request})
+                            # Set the user ID - THIS IS THE KEY LINE
+                            game_data['user'] = request.user.id
+                            
+                            # Log after setting user
+                            logger.info(f"Row {row_num}: User ID in game_data: {game_data['user']} (type: {type(game_data['user'])})")
+                            
+                            # Create serializer with context
+                            game_serializer = GameCreateSerializer(
+                                data=game_data,
+                                context={'request': request}
+                            )
+                            
                             if game_serializer.is_valid():
                                 game = game_serializer.save()
                                 
                                 # Log success for first few games
-                                #if len(imported) < 10:
-                                   # logger.info(f"✓ Row {row_count}: Game saved - ID: {game.id}, User ID in DB: {game.user_id}")
+                                if len(imported) < 10:
+                                    logger.info(f"✓ Row {row_num}: Game saved - ID: {game.id}, User ID in DB: {game.user_id}")
                                 
                                 imported.append({
                                     'id': game.id,
@@ -456,14 +464,15 @@ class GameViewSet(viewsets.ModelViewSet):
                                     'opponent': game.opponent_name
                                 })
                             else:
-                               # logger.error(f"Validation error row {row_num}: {game_serializer.errors}")
+                                logger.error(f"Row {row_num}: Validation failed: {game_serializer.errors}")
+                                logger.error(f"Row {row_num}: Data that caused error: {game_data}")
                                 errors.append({
                                     'row': row_num,
                                     'errors': game_serializer.errors,
                                     'data': clean_row
                                 })
                         else:
-                           # logger.warning(f"Row {row_num}: Could not determine result. Result field: {clean_row.get('result', 'N/A')}")
+                            logger.warning(f"Row {row_num}: Could not determine result. Result field: {clean_row.get('result', 'N/A')}")
                             errors.append({
                                 'row': row_num,
                                 'error': 'Could not determine game result',
@@ -519,20 +528,24 @@ class GameViewSet(viewsets.ModelViewSet):
                 
                 for idx, game_data in enumerate(games):
                     if game_data and game_data.get('result'):
-                        # CRITICAL: Add the current user to game data
-                        game_data['user'] = request.user.id
                         games_with_user_set += 1
                         
-                        # Log first few game details
+                        # ===== CRITICAL: Set user as ID (integer) =====
+                        logger.info(f"Game {idx}: Setting user ID to {request.user.id}")
+                        game_data['user'] = request.user.id
+                        logger.info(f"Game {idx}: User ID in game_data: {game_data['user']} (type: {type(game_data['user'])})")
+                        
                         if idx < 5:
-                            logger.info(f"Game {idx}: Setting user_id={request.user.id}")
                             logger.info(f"Game {idx} details: ID={game_data.get('game_id')}, White={game_data.get('white_player')}, Black={game_data.get('black_player')}, Result={game_data.get('result')}")
                         
-                        game_serializer = GameCreateSerializer(data=game_data)
+                        game_serializer = GameCreateSerializer(
+                            data=game_data,
+                            context={'request': request}
+                        )
+                        
                         if game_serializer.is_valid():
                             game = game_serializer.save()
                             
-                            # Log success for first few games
                             if len(imported) < 10:
                                 logger.info(f"✓ Game {idx}: Saved - ID: {game.id}, User ID in DB: {game.user_id}")
                             
@@ -542,7 +555,8 @@ class GameViewSet(viewsets.ModelViewSet):
                                 'opponent': game.opponent_name
                             })
                         else:
-                            logger.error(f"Game {idx} validation errors: {game_serializer.errors}")
+                            logger.error(f"Game {idx}: Validation failed: {game_serializer.errors}")
+                            logger.error(f"Game {idx}: Data that caused error: {game_data}")
                             errors.append({
                                 'game_index': idx,
                                 'errors': game_serializer.errors
