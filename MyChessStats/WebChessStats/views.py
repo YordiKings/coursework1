@@ -369,66 +369,134 @@ class GameViewSet(viewsets.ModelViewSet):
         return queryset
     
     def perform_create(self, serializer):
-        """Set the user when creating a new game"""
+        """Set the user when creating a new game manually"""
         serializer.save(user=self.request.user)
     
     @action(detail=False, methods=['post'], url_path='import')
     def import_games(self, request):
         """Bulk import games from Chess.com CSV or Lichess PGN"""
-        logger.info(f"Import games endpoint called by user: {request.user.username}")
+        
+        # Log the start of import
+        logger.info("=" * 60)
+        logger.info("IMPORT GAMES FUNCTION CALLED")
+        logger.info("=" * 60)
+        logger.info(f"User: {request.user.username} (ID: {request.user.id})")
+        logger.info(f"Is authenticated: {request.user.is_authenticated}")
+        logger.info(f"Request method: {request.method}")
+        logger.info(f"Content type: {request.content_type}")
         
         serializer = GameImportSerializer(data=request.data)
         
         if not serializer.is_valid():
-            logger.error(f"Import serializer errors: {serializer.errors}")
+            logger.error(f"Serializer errors: {serializer.errors}")
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
         platform = serializer.validated_data['platform']
         file = serializer.validated_data['file']
-        
-        # Get username for both platforms
         username = serializer.validated_data.get('username', request.user.username)
+        
+        logger.info(f"Platform: {platform}")
+        logger.info(f"Username provided: {username}")
+        logger.info(f"File name: {file.name}")
+        logger.info(f"File size: {file.size} bytes")
         
         try:
             if platform == 'chesscom':
                 # Read CSV file
+                logger.info("Processing Chess.com CSV import...")
                 decoded_file = file.read().decode('utf-8-sig')
                 io_string = io.StringIO(decoded_file)
                 reader = csv.DictReader(io_string)
                 
+                # Log CSV structure
+                logger.info(f"CSV fieldnames: {reader.fieldnames}")
+                
                 imported = []
                 errors = []
+                row_count = 0
+                games_with_user_set = 0
                 
                 for row_num, row in enumerate(reader, start=2):
+                    row_count += 1
+                    
+                    # Log every 100 rows to avoid log spam
+                    #if row_count % 100 == 0:
+                        #logger.info(f"Processed {row_count} rows...")
+                    
                     try:
                         clean_row = {k: v for k, v in row.items() if k and k.strip()}
-                        # Pass the username to the parser
+                        
+                        # Log first row as sample
+                        if row_count == 1:
+                            logger.info(f"Sample row data (first row): {clean_row}")
+                        
                         game_data = ChessComImporter.parse_row(clean_row, username=username)
                         
                         if game_data and game_data.get('result'):
-                            # Add the user to game data
+                            # CRITICAL: Add the current user to game data
                             game_data['user'] = request.user.id
-                            game_serializer = GameCreateSerializer(data=game_data)
+                            games_with_user_set += 1
+                            
+                            # Log user assignment for first few games
+                            if row_count <= 5:
+                                logger.info(f"Row {row_count}: Setting user_id={request.user.id} for game {game_data.get('game_id')}")
+                                logger.debug(f"Game data keys for row {row_count}: {list(game_data.keys())}")
+                            
+                            game_serializer = GameCreateSerializer(data=game_data, context={'request': request})
                             if game_serializer.is_valid():
                                 game = game_serializer.save()
+                                
+                                # Log success for first few games
+                                #if len(imported) < 10:
+                                   # logger.info(f"✓ Row {row_count}: Game saved - ID: {game.id}, User ID in DB: {game.user_id}")
+                                
                                 imported.append({
                                     'id': game.id,
                                     'game_id': game.game_id,
                                     'opponent': game.opponent_name
                                 })
                             else:
+                               # logger.error(f"Validation error row {row_num}: {game_serializer.errors}")
                                 errors.append({
                                     'row': row_num,
                                     'errors': game_serializer.errors,
                                     'data': clean_row
                                 })
                         else:
+                           # logger.warning(f"Row {row_num}: Could not determine result. Result field: {clean_row.get('result', 'N/A')}")
                             errors.append({
                                 'row': row_num,
-                                'error': 'Could not determine game result'
+                                'error': 'Could not determine game result',
+                                'data': clean_row
                             })
                     except Exception as e:
+                        logger.exception(f"Exception processing row {row_num}")
                         errors.append({'row': row_num, 'error': str(e)})
+                
+                # Log summary
+                logger.info("=" * 40)
+                logger.info("CHESS.COM IMPORT SUMMARY")
+                logger.info("=" * 40)
+                logger.info(f"Total rows processed: {row_count}")
+                logger.info(f"Games where user was set in code: {games_with_user_set}")
+                logger.info(f"Successfully imported: {len(imported)}")
+                logger.info(f"Errors: {len(errors)}")
+                
+                # Verify user assignment in database
+                if imported:
+                    logger.info("Verifying user assignment in database...")
+                    sample_size = min(10, len(imported))
+                    sample_games = Game.objects.filter(id__in=[g['id'] for g in imported[:sample_size]])
+                    null_user_count = 0
+                    for game in sample_games:
+                        logger.info(f"Verification - Game {game.id}: user_id = {game.user_id} (username: {game.user.username if game.user else 'NO USER'})")
+                        if game.user_id is None:
+                            null_user_count += 1
+                    
+                    if null_user_count > 0:
+                        logger.error(f"WARNING: {null_user_count} out of {sample_size} sampled games have NULL user!")
+                    else:
+                        logger.info(f"SUCCESS: All {sample_size} sampled games have proper user assignment")
                 
                 return Response({
                     'imported_count': len(imported),
@@ -437,21 +505,37 @@ class GameViewSet(viewsets.ModelViewSet):
                 }, status=status.HTTP_201_CREATED if imported else status.HTTP_400_BAD_REQUEST)
             
             else:  # lichess
+                logger.info("Processing Lichess PGN import...")
                 pgn_content = file.read().decode('utf-8')
-                games = LichessImporter.parse_pgn(pgn_content, username=username)
+                logger.info(f"PGN content length: {len(pgn_content)} characters")
+                logger.info(f"PGN preview (first 500 chars): {pgn_content[:500]}")
                 
-                logger.info(f"Parsed {len(games)} games from Lichess PGN for user {username}")
+                games = LichessImporter.parse_pgn(pgn_content, username=username)
+                logger.info(f"Parsed {len(games)} games from PGN")
                 
                 imported = []
                 errors = []
+                games_with_user_set = 0
                 
                 for idx, game_data in enumerate(games):
                     if game_data and game_data.get('result'):
-                        # Add the user to game data
+                        # CRITICAL: Add the current user to game data
                         game_data['user'] = request.user.id
+                        games_with_user_set += 1
+                        
+                        # Log first few game details
+                        if idx < 5:
+                            logger.info(f"Game {idx}: Setting user_id={request.user.id}")
+                            logger.info(f"Game {idx} details: ID={game_data.get('game_id')}, White={game_data.get('white_player')}, Black={game_data.get('black_player')}, Result={game_data.get('result')}")
+                        
                         game_serializer = GameCreateSerializer(data=game_data)
                         if game_serializer.is_valid():
                             game = game_serializer.save()
+                            
+                            # Log success for first few games
+                            if len(imported) < 10:
+                                logger.info(f"✓ Game {idx}: Saved - ID: {game.id}, User ID in DB: {game.user_id}")
+                            
                             imported.append({
                                 'id': game.id,
                                 'game_id': game.game_id,
@@ -464,11 +548,36 @@ class GameViewSet(viewsets.ModelViewSet):
                                 'errors': game_serializer.errors
                             })
                     else:
-                        logger.warning(f"Game {idx} could not be parsed or result not determined")
+                        logger.warning(f"Game {idx}: Could not parse or determine result")
                         errors.append({
                             'game_index': idx,
                             'error': 'Could not determine game result or identify your games'
                         })
+                
+                # Log summary
+                logger.info("=" * 40)
+                logger.info("LICHESS IMPORT SUMMARY")
+                logger.info("=" * 40)
+                logger.info(f"Games parsed from PGN: {len(games)}")
+                logger.info(f"Games where user was set in code: {games_with_user_set}")
+                logger.info(f"Successfully imported: {len(imported)}")
+                logger.info(f"Errors: {len(errors)}")
+                
+                # Verify user assignment in database
+                if imported:
+                    logger.info("Verifying user assignment in database...")
+                    sample_size = min(10, len(imported))
+                    sample_games = Game.objects.filter(id__in=[g['id'] for g in imported[:sample_size]])
+                    null_user_count = 0
+                    for game in sample_games:
+                        logger.info(f"Verification - Game {game.id}: user_id = {game.user_id} (username: {game.user.username if game.user else 'NO USER'})")
+                        if game.user_id is None:
+                            null_user_count += 1
+                    
+                    if null_user_count > 0:
+                        logger.error(f"WARNING: {null_user_count} out of {sample_size} sampled games have NULL user!")
+                    else:
+                        logger.info(f"SUCCESS: All {sample_size} sampled games have proper user assignment")
                 
                 return Response({
                     'imported_count': len(imported),
@@ -477,7 +586,7 @@ class GameViewSet(viewsets.ModelViewSet):
                 }, status=status.HTTP_201_CREATED if imported else status.HTTP_400_BAD_REQUEST)
                 
         except Exception as e:
-            logger.exception("Import failed with exception")
+            logger.exception("Fatal error during import")
             return Response(
                 {'error': f'Import failed: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR

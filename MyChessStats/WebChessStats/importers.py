@@ -70,35 +70,35 @@ class ChessComImporter:
         outcome = row.get('outcome', '').lower() if row.get('outcome') else ''
         user_color = row.get('userColor', '').lower()
         
-        print(f"Parsing row - Result: {game_result}, WonBy: {won_by}, UserColor: {user_color}")
+        #print(f"Parsing row - Result: {game_result}, WonBy: {won_by}, UserColor: {user_color}")
         
         # Determine result based on clear logic
         if game_result == 'win':
             # If result is 'win', I won
             result_code = 'W'
             win_method = cls.WIN_METHOD_MAP.get(won_by if won_by else outcome, 'OTH')
-            print(f"  -> Win for me via {win_method}")
+            #print(f"  -> Win for me via {win_method}")
             
         elif game_result == 'checkmated':
             # If result is 'checkmated', I lost
             result_code = 'L'
             win_method = cls.WIN_METHOD_MAP.get('checkmate', 'CHM')
-            print(f"  -> Loss for me via checkmate")
+            #print(f"  -> Loss for me via checkmate")
             
         elif game_result in ['stalemate', 'repetition', 'insufficient', 'agreed', 'timevsinsufficient']:
             # Draw results
             result_code = 'D'
             win_method = cls.WIN_METHOD_MAP.get(game_result, 'OTH')
-            print(f"  -> Draw via {game_result}")
+            #(f"  -> Draw via {game_result}")
             
         elif game_result in ['resigned', 'timeout', 'abandoned']:
             # These are always losses for me (since they're not wins)
             result_code = 'L'
             win_method = cls.WIN_METHOD_MAP.get(game_result, 'OTH')
-            print(f"  -> Loss for me via {game_result}")
+            #print(f"  -> Loss for me via {game_result}")
             
         else:
-            print(f"  -> Unknown result: {game_result}")
+            #print(f"  -> Unknown result: {game_result}")
             result_code = None
             win_method = None
         

@@ -10,8 +10,32 @@ class GameSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Game
-        fields = '__all__'
-        read_only_fields = ['created_at', 'updated_at', 'id', 'user']  # Add user here
+        exclude = ['created_at', 'updated_at', 'moves_with_eval']
+        # Make sure user is writable
+        extra_kwargs = {
+            'user': {'required': False, 'allow_null': False}  # Don't allow null
+        }
+    
+    def validate(self, data):
+        """Add validation to ensure user is present"""
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            # If user isn't in data but we have request, add it
+            if 'user' not in data or data['user'] is None:
+                data['user'] = request.user.id
+        return data
+    
+    def create(self, validated_data):
+        """Log what's being saved"""
+        logger = logging.getLogger(__name__)
+        logger.info(f"GameCreateSerializer.create called with user_id: {validated_data.get('user')}")
+        
+        # Ensure user is present
+        if 'user' not in validated_data or validated_data['user'] is None:
+            logger.error("CRITICAL: Attempting to create game without user!")
+            raise serializers.ValidationError({"user": "User is required for game creation"})
+        
+        return super().create(validated_data)
     
     def get_opponent(self, obj):
         return obj.get_opponent()
