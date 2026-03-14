@@ -255,7 +255,10 @@ def home_view(request):
 def game_list_view(request):
     """Games list page view"""
     return render(request, 'WebChessStats/game_list.html')
-
+@login_required
+def game_edit_view(request, game_id):
+    """Game edit page view"""
+    return render(request, 'WebChessStats/game_edit.html', {'game_id': game_id})
 
 @login_required
 def game_detail_view(request, game_id):
@@ -780,7 +783,7 @@ class GameViewSet(viewsets.ModelViewSet):
             'message': f'Successfully deleted {deleted_count} games',
             'deleted_count': deleted_count
         })
-
+    
     
 from .board_utils import fen_to_svg, get_last_move_from_moves
 
@@ -864,3 +867,4 @@ def debug_counts(self, request):
         'null_results': null_results,
         'samples': samples
     })    
+

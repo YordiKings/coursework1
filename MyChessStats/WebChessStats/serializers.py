@@ -1,12 +1,6 @@
 from rest_framework import serializers
 from .models import Game
-import json
 from django.contrib.auth.models import User 
-
-import logging
-
-
-
 
 
 class GameSerializer(serializers.ModelSerializer):
@@ -17,29 +11,11 @@ class GameSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Game
-        exclude = ['created_at', 'updated_at', 'moves_with_eval']
-        # Make sure user is writable
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at', 'id', 'user']  # Add 'user' here
         extra_kwargs = {
-            'user': {'required': False, 'allow_null': False}  # Don't allow null
+            'user': {'required': False},  # Not required since it's read-only
         }
-    
-    def validate(self, data):
-        """Add validation to ensure user is present"""
-        request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            # If user isn't in data but we have request, add it
-            if 'user' not in data or data['user'] is None:
-                data['user'] = request.user.id
-        return data
-    
-    def create(self, validated_data):
-        """Log what's being saved"""
-        
-        # Ensure user is present
-        if 'user' not in validated_data or validated_data['user'] is None:
-            raise serializers.ValidationError({"user": "User is required for game creation"})
-        
-        return super().create(validated_data)
     
     def get_opponent(self, obj):
         return obj.get_opponent()
@@ -53,6 +29,30 @@ class GameSerializer(serializers.ModelSerializer):
         if value and value < 0:
             raise serializers.ValidationError("Move count cannot be negative")
         return value
+    
+    def validate_user(self, value):
+        """Handle both user ID and user instance"""
+        from django.contrib.auth.models import User
+        
+        # If it's already a User instance, return it
+        if isinstance(value, User):
+            return value
+        
+        # If it's an integer, try to get the User instance
+        if isinstance(value, int):
+            try:
+                return User.objects.get(id=value)
+            except User.DoesNotExist:
+                raise serializers.ValidationError(f"User with id {value} does not exist")
+        
+        # If it's a string that can be converted to int
+        if isinstance(value, str) and value.isdigit():
+            try:
+                return User.objects.get(id=int(value))
+            except User.DoesNotExist:
+                raise serializers.ValidationError(f"User with id {value} does not exist")
+        
+        raise serializers.ValidationError(f"Invalid user value: {value}")
 class GameListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for list views"""
     opponent = serializers.SerializerMethodField()

@@ -231,15 +231,33 @@ function renderGames(games) {
     const tbody = document.getElementById('gamesTableBody');
     
     if (!games || games.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center">No games found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center">No games found</td></tr>';
         return;
     }
     
     tbody.innerHTML = '';
     
     games.forEach(game => {
+        // CRITICAL: Add debugging to see what game contains
+        console.log('Game object:', game);
+        console.log('Game ID:', game.id);
+        console.log('Game ID type:', typeof game.id);
+        
+        // Ensure we have a valid ID
+        const gameId = game.id;
+        if (!gameId) {
+            console.error('Game has no ID!', game);
+            return; // Skip this game
+        }
+        
         const resultClass = game.result === 'W' ? 'win-text' : 
                            game.result === 'L' ? 'loss-text' : 'draw-text';
+        
+        // Build URLs with the ID
+        const viewUrl = `/game/${gameId}/`;
+        const editUrl = `/game/${gameId}/edit/`;
+        
+        console.log('Generated URLs:', { viewUrl, editUrl });
         
         const row = document.createElement('tr');
         row.innerHTML = `
@@ -253,10 +271,13 @@ function renderGames(games) {
             <td><span class="badge bg-secondary">${game.time_class}</span></td>
             <td>
                 <div class="btn-group btn-group-sm">
-                    <a href="/game/${game.id}/" class="btn btn-outline-info" title="View">
+                    <a href="${viewUrl}" class="btn btn-outline-info" title="View">
                         <i class="fas fa-eye"></i>
                     </a>
-                    <button onclick="showDeleteModal(${game.id})" class="btn btn-outline-danger" title="Delete">
+                    <a href="${editUrl}" class="btn btn-outline-primary" title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </a>
+                    <button onclick="showDeleteModal(${gameId})" class="btn btn-outline-danger" title="Delete">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>

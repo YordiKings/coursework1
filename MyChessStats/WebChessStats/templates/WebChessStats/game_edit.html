@@ -1,0 +1,223 @@
+{% extends 'WebChessStats/base.html' %}
+
+{% block title %}Edit Game - My Chess Stats{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0"><i class="fas fa-edit"></i> Edit Game</h4>
+            </div>
+            <div class="card-body">
+                <form method="post" id="gameEditForm">
+                    {% csrf_token %}
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="platform" class="form-label">Platform</label>
+                            <select class="form-select" id="platform" name="platform" required>
+                                <option value="CH">Chess.com</option>
+                                <option value="LI">Lichess</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="game_id" class="form-label">Game ID</label>
+                            <input type="text" class="form-control" id="game_id" name="game_id" readonly>
+                            <small class="text-muted">Game ID cannot be changed</small>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="date_played" class="form-label">Date</label>
+                            <input type="date" class="form-control" id="date_played" name="date_played" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="time_class" class="form-label">Time Class</label>
+                            <select class="form-select" id="time_class" name="time_class" required>
+                                <option value="bullet">Bullet</option>
+                                <option value="blitz">Blitz</option>
+                                <option value="rapid">Rapid</option>
+                                <option value="classical">Classical</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="white_player" class="form-label">White Player</label>
+                            <input type="text" class="form-control" id="white_player" name="white_player" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="black_player" class="form-label">Black Player</label>
+                            <input type="text" class="form-control" id="black_player" name="black_player" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="my_color" class="form-label">Your Color</label>
+                            <select class="form-select" id="my_color" name="my_color" required>
+                                <option value="white">White</option>
+                                <option value="black">Black</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label for="result" class="form-label">Result</label>
+                            <select class="form-select" id="result" name="result" required>
+                                <option value="W">Win</option>
+                                <option value="L">Loss</option>
+                                <option value="D">Draw</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="my_rating" class="form-label">Your Rating</label>
+                            <input type="number" class="form-control" id="my_rating" name="my_rating">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="opponent_rating" class="form-label">Opponent Rating</label>
+                            <input type="number" class="form-control" id="opponent_rating" name="opponent_rating">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="opponent_name" class="form-label">Opponent Name</label>
+                            <input type="text" class="form-control" id="opponent_name" name="opponent_name">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="opening" class="form-label">Opening</label>
+                        <input type="text" class="form-control" id="opening" name="opening">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="pgn" class="form-label">PGN</label>
+                        <textarea class="form-control" id="pgn" name="pgn" rows="5"></textarea>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{% url 'game_list' %}" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">Update Game</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading spinner -->
+<div id="loadingSpinner" class="text-center mt-3" style="display: none;">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Get game ID from URL
+const gameId = window.location.pathname.split('/')[2];
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadGameData();
+    
+    document.getElementById('gameEditForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        updateGame();
+    });
+});
+
+function loadGameData() {
+    showLoading();
+    
+    fetch(`/api/games/${gameId}/`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to load game data');
+            }
+            return response.json();
+        })
+        .then(game => {
+            hideLoading();
+            populateForm(game);
+        })
+        .catch(error => {
+            hideLoading();
+            console.error('Error loading game:', error);
+            alert('Error loading game data: ' + error.message);
+        });
+}
+
+function populateForm(game) {
+    document.getElementById('platform').value = game.platform;
+    document.getElementById('game_id').value = game.game_id;
+    document.getElementById('date_played').value = game.date_played;
+    document.getElementById('time_class').value = game.time_class;
+    document.getElementById('white_player').value = game.white_player;
+    document.getElementById('black_player').value = game.black_player;
+    document.getElementById('my_color').value = game.my_color;
+    document.getElementById('result').value = game.result;
+    document.getElementById('my_rating').value = game.my_rating || '';
+    document.getElementById('opponent_rating').value = game.opponent_rating || '';
+    document.getElementById('opponent_name').value = game.opponent_name || '';
+    document.getElementById('opening').value = game.opening || '';
+    document.getElementById('pgn').value = game.pgn || '';
+}
+
+function updateGame() {
+    const form = document.getElementById('gameEditForm');
+    const formData = new FormData(form);
+    const data = {};
+    
+    formData.forEach((value, key) => {
+        data[key] = value;
+    });
+    
+    showLoading();
+    
+    fetch(`/api/games/${gameId}/`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => {
+        if (response.ok) {
+            window.location.href = '/games/';
+        } else {
+            return response.json().then(err => { throw err; });
+        }
+    })
+    .catch(error => {
+        hideLoading();
+        console.error('Error updating game:', error);
+        alert('Error updating game: ' + JSON.stringify(error));
+    });
+}
+
+function showLoading() {
+    document.getElementById('loadingSpinner').style.display = 'block';
+}
+
+function hideLoading() {
+    document.getElementById('loadingSpinner').style.display = 'none';
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>
+{% endblock %}
