@@ -170,8 +170,8 @@ mychessstats/
 ## Technology Stack
 
 ### Backend
-- Django 5.1.5 - Web framework
-- Django REST Framework 3.15.2 - API development
+- Django 4.2.29 - Web framework
+- Django REST Framework 3.16.1 - API development
 - python-chess - Chess logic and PGN parsing
 - SQLite - Development database (configurable for production)
 
