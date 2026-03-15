@@ -11,6 +11,10 @@ A comprehensive web application for tracking and analyzing chess games from Ches
 ![alt text](ScreenshotHome.png)
 ![alt text](image-1.png)
 ![alt text](image-2.png)
+
+## Documentation
+[Api documentation](../api_docs.pdf)
+
 ## Features
 
 ### User Authentication
@@ -148,7 +152,8 @@ mychessstats/
 │   │       ├── import.html       # Import interface
 │   │       ├── stats.html        # Statistics dashboard
 │   │       ├── login.html        # Login form
-│   │       └── register.html     # Registration form
+│   │       ├── register.html     # Registration form
+│   │       └── api_docs.html     # API documentation
 │   ├── admin.py                  # Admin configuration
 │   ├── apps.py                   # App configuration
 │   ├── models.py                 # Game data model

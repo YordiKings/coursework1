@@ -1,0 +1,1298 @@
+<!DOCTYPE html>
+<html lang="en" class=" edvjzpubv idc0_350"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Documentation - My Chess Stats</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="API%20Documentation%20-%20My%20Chess%20Stats_files/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="API%20Documentation%20-%20My%20Chess%20Stats_files/all.min.css">
+    <!-- Chart.js for graphs -->
+    <script src="API%20Documentation%20-%20My%20Chess%20Stats_files/chart.js"></script>
+    
+    <style>
+        .navbar-brand {
+            font-weight: bold;
+            font-size: 1.5rem;
+        }
+        .stat-card {
+            transition: transform 0.2s;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+        .win-text { color: #28a745; }
+        .loss-text { color: #dc3545; }
+        .draw-text { color: #ffc107; }
+        .game-row:hover {
+            background-color: rgba(0,0,0,0.02);
+            cursor: pointer;
+        }
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+        }
+        .chess-board {
+            background-color: #f0d9b5;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        #boardContainer {
+            min-height: 420px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        #chesscomRatingChart, #lichessRatingChart {
+            max-height: 300px;
+            width: 100%;
+        }
+
+        .card-header i {
+            margin-right: 5px;
+        }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="http://127.0.0.1:8000/">
+                <i class="fas fa-chess-knight"></i> My Chess Stats
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    
+                    <li class="nav-item">
+                        <a class="nav-link " href="http://127.0.0.1:8000/">
+                            <i class="fas fa-home"></i> Home
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link " href="http://127.0.0.1:8000/games/">
+                            <i class="fas fa-list"></i> Games
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link " href="http://127.0.0.1:8000/stats/">
+                            <i class="fas fa-chart-bar"></i> Statistics
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link " href="http://127.0.0.1:8000/import/">
+                            <i class="fas fa-upload"></i> Import
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="http://127.0.0.1:8000/api/docs/">
+                            <i class="fas fa-book"></i> API Docs
+                        </a>
+                    </li>
+                    
+                </ul>
+                <ul class="navbar-nav">
+                    
+                    <li class="nav-item">
+                        <span class="nav-link text-light">
+                            <i class="fas fa-user"></i> admin
+                        </span>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="http://127.0.0.1:8000/logout/">
+                            <i class="fas fa-sign-out-alt"></i> Logout
+                        </a>
+                    </li>
+                    
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Messages/Alerts -->
+    <div class="container mt-3">
+        
+    </div>
+
+    <!-- Main Content -->
+    <main class="container mt-4">
+        
+<style>
+    :root {
+        --api-primary: #0d6efd;
+        --api-success: #198754;
+        --api-danger: #dc3545;
+        --api-warning: #ffc107;
+        --api-info: #0dcaf0;
+        --api-dark: #212529;
+        --api-light: #f8f9fa;
+        --api-border: #dee2e6;
+    }
+
+    .api-container {
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+
+    /* Sidebar */
+    .api-sidebar {
+        position: sticky;
+        top: 20px;
+        max-height: calc(100vh - 40px);
+        overflow-y: auto;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        padding: 1rem;
+    }
+
+    .api-sidebar .nav-link {
+        color: var(--api-dark);
+        padding: 0.5rem 1rem;
+        border-radius: 5px;
+        transition: all 0.2s;
+    }
+
+    .api-sidebar .nav-link:hover {
+        background: var(--api-light);
+        color: var(--api-primary);
+    }
+
+    .api-sidebar .nav-link.active {
+        background: var(--api-primary);
+        color: white;
+    }
+
+    .api-sidebar .nav-link i {
+        width: 20px;
+        margin-right: 8px;
+    }
+
+    /* Endpoint Cards */
+    .endpoint-card {
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        margin-bottom: 2rem;
+        overflow: hidden;
+    }
+
+    .endpoint-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid var(--api-border);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .endpoint-method {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-weight: bold;
+        font-size: 0.875rem;
+        margin-right: 1rem;
+        text-transform: uppercase;
+    }
+
+    .method-get { background: #61affe; color: white; }
+    .method-post { background: #49cc90; color: white; }
+    .method-put { background: #fca130; color: white; }
+    .method-delete { background: #f93e3e; color: white; }
+
+    .endpoint-path {
+        font-family: monospace;
+        font-size: 1.25rem;
+        font-weight: bold;
+    }
+
+    .endpoint-body {
+        padding: 1.5rem;
+    }
+
+    /* Tables */
+    .api-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1rem 0;
+    }
+
+    .api-table th {
+        background: var(--api-light);
+        padding: 0.75rem;
+        text-align: left;
+        font-weight: 600;
+        border-bottom: 2px solid var(--api-border);
+    }
+
+    .api-table td {
+        padding: 0.75rem;
+        border-bottom: 1px solid var(--api-border);
+    }
+
+    .api-table tr:hover {
+        background: var(--api-light);
+    }
+
+    /* Code Blocks */
+    .code-block {
+        background: var(--api-dark);
+        color: #e9ecef;
+        padding: 1rem;
+        border-radius: 5px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        overflow-x: auto;
+        margin: 1rem 0;
+    }
+
+    .code-block pre {
+        margin: 0;
+        color: inherit;
+        background: transparent;
+    }
+
+    /* Badges */
+    .badge-required {
+        background: var(--api-danger);
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 3px;
+        font-size: 0.75rem;
+        margin-left: 0.5rem;
+    }
+
+    .badge-optional {
+        background: var(--api-secondary);
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 3px;
+        font-size: 0.75rem;
+        margin-left: 0.5rem;
+    }
+
+    /* Response Examples */
+    .response-example {
+        border-left: 4px solid var(--api-success);
+        background: var(--api-light);
+        padding: 1rem;
+        margin: 1rem 0;
+    }
+
+    .response-error {
+        border-left-color: var(--api-danger);
+    }
+
+    /* Authentication Banner */
+    .auth-banner {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 10px;
+        margin-bottom: 2rem;
+    }
+
+    .auth-banner code {
+        background: rgba(255,255,255,0.2);
+        color: white;
+        padding: 0.2rem 0.4rem;
+        border-radius: 3px;
+    }
+
+    /* Copy Button */
+    .copy-btn {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        background: rgba(255,255,255,0.2);
+        border: none;
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 3px;
+        font-size: 0.75rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+        background: rgba(255,255,255,0.3);
+    }
+
+    .code-block-wrapper {
+        position: relative;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .api-sidebar {
+            position: static;
+            margin-bottom: 2rem;
+        }
+    }
+
+    /* Search */
+    .api-search {
+        margin-bottom: 1rem;
+        padding: 0.5rem;
+        border: 1px solid var(--api-border);
+        border-radius: 5px;
+        width: 100%;
+    }
+
+    /* Tooltips */
+    .tooltip-icon {
+        color: var(--api-info);
+        cursor: help;
+        margin-left: 0.25rem;
+    }
+</style>
+
+<div class="api-container">
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-md-3">
+            <div class="api-sidebar">
+                <h5 class="mb-3"><i class="fas fa-bolt"></i> API Reference</h5>
+                
+                <input type="text" class="api-search" placeholder="Search endpoints..." id="apiSearch">
+                
+                <nav class="nav flex-column" id="apiNav">
+                    <a class="nav-link" href="#overview">
+                        <i class="fas fa-home"></i> Overview
+                    </a>
+                    <a class="nav-link" href="#authentication">
+                        <i class="fas fa-lock"></i> Authentication
+                    </a>
+                    
+                    <h6 class="mt-3 mb-2 text-muted">Games</h6>
+                    <a class="nav-link" href="#list-games">
+                        <i class="fas fa-list"></i> List Games
+                    </a>
+                    <a class="nav-link" href="#create-game">
+                        <i class="fas fa-plus"></i> Create Game
+                    </a>
+                    <a class="nav-link" href="#get-game">
+                        <i class="fas fa-eye"></i> Get Game
+                    </a>
+                    <a class="nav-link" href="#update-game">
+                        <i class="fas fa-edit"></i> Update Game
+                    </a>
+                    <a class="nav-link" href="#delete-game">
+                        <i class="fas fa-trash"></i> Delete Game
+                    </a>
+                    <a class="nav-link" href="#import-games">
+                        <i class="fas fa-upload"></i> Import Games
+                    </a>
+                    
+                    <h6 class="mt-3 mb-2 text-muted">Statistics</h6>
+                    <a class="nav-link" href="#get-stats">
+                        <i class="fas fa-chart-bar"></i> Get Statistics
+                    </a>
+                    <a class="nav-link" href="#get-pgn">
+                        <i class="fas fa-download"></i> Get PGN
+                    </a>
+                    
+                    <h6 class="mt-3 mb-2 text-muted">Utilities</h6>
+                    <a class="nav-link" href="#board-image">
+                        <i class="fas fa-chess-board"></i> Board Image
+                    </a>
+                    <a class="nav-link" href="#delete-all">
+                        <i class="fas fa-trash-alt"></i> Delete All
+                    </a>
+                    
+                    <h6 class="mt-3 mb-2 text-muted">Error Codes</h6>
+                    <a class="nav-link" href="#errors">
+                        <i class="fas fa-exclamation-triangle"></i> Error Handling
+                    </a>
+                </nav>
+            </div>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="col-md-9">
+            <!-- Overview -->
+            <section id="overview">
+                <div class="auth-banner">
+                    <h1><i class="fas fa-chess-queen"></i> My Chess Stats API</h1>
+                    <p class="lead">Base URL: <code>http://localhost:8000/api/</code></p>
+                    <p>All API endpoints require authentication. The API uses Django's session authentication with CSRF protection.</p>
+                </div>
+            </section>
+            
+            <!-- Authentication -->
+            <section id="authentication" class="mb-5">
+                <h2><i class="fas fa-lock"></i> Authentication</h2>
+                <div class="endpoint-card">
+                    <div class="endpoint-body">
+                        <h5>Session Authentication</h5>
+                        <p>The API uses Django's session authentication. Include the session cookie and CSRF token in your requests.</p>
+                        
+                        <h6 class="mt-3">Login Endpoint</h6>
+                        <div class="code-block-wrapper">
+                            <button class="copy-btn" onclick="copyToClipboard('login-example')">Copy</button>
+                            <div id="login-example" class="code-block">
+                                <pre>POST /login/
+Content-Type: application/json
+
+{
+    "username": "yourusername",
+    "password": "yourpassword"
+}</pre>
+                            </div>
+                        </div>
+                        
+                        <h6 class="mt-3">CSRF Token</h6>
+                        <p>For POST, PUT, DELETE requests, include the CSRF token:</p>
+                        <div class="code-block-wrapper">
+                            <button class="copy-btn" onclick="copyToClipboard('csrf-example')">Copy</button>
+                            <div id="csrf-example" class="code-block">
+                                <pre>// JavaScript function to get CSRF token
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie &amp;&amp; document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i &lt; cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+// Include in request headers
+headers: {
+    'X-CSRFToken': getCookie('csrftoken'),
+    'Content-Type': 'application/json'
+}</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- List Games -->
+            <section id="list-games" class="mb-5">
+                <h2><i class="fas fa-list"></i> List Games</h2>
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method method-get">GET</span>
+                        <span class="endpoint-path">/api/games/</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Retrieves a paginated list of the authenticated user's games.</p>
+                        
+                        <h6>Query Parameters</h6>
+                        <table class="api-table">
+                            <thead>
+                                <tr>
+                                    <th>Parameter</th>
+                                    <th>Type</th>
+                                    <th>Description</th>
+                                    <th>Example</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>page</td>
+                                    <td>integer</td>
+                                    <td>Page number for pagination</td>
+                                    <td><code>page=2</code></td>
+                                </tr>
+                                <tr>
+                                    <td>platform</td>
+                                    <td>string</td>
+                                    <td>Filter by platform (chesscom/lichess)</td>
+                                    <td><code>platform=chesscom</code></td>
+                                </tr>
+                                <tr>
+                                    <td>result</td>
+                                    <td>string</td>
+                                    <td>Filter by result (W/L/D)</td>
+                                    <td><code>result=W</code></td>
+                                </tr>
+                                <tr>
+                                    <td>time_class</td>
+                                    <td>string</td>
+                                    <td>Filter by time control</td>
+                                    <td><code>time_class=blitz</code></td>
+                                </tr>
+                                <tr>
+                                    <td>search</td>
+                                    <td>string</td>
+                                    <td>Search opponent name</td>
+                                    <td><code>search=magnus</code></td>
+                                </tr>
+                                <tr>
+                                    <td>order_by</td>
+                                    <td>string</td>
+                                    <td>Sort field (+/- prefix for direction)</td>
+                                    <td><code>order_by=-date_played</code></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        
+                        <h6 class="mt-3">Example Request</h6>
+                        <div class="code-block-wrapper">
+                            <button class="copy-btn" onclick="copyToClipboard('list-request')">Copy</button>
+                            <div id="list-request" class="code-block">
+                                <pre>GET /api/games/?platform=chesscom&amp;result=W&amp;order_by=-date_played&amp;page=1</pre>
+                            </div>
+                        </div>
+                        
+                        <h6 class="mt-3">Example Response</h6>
+                        <div class="response-example">
+                            <div class="code-block-wrapper">
+                                <button class="copy-btn" onclick="copyToClipboard('list-response')">Copy</button>
+                                <div id="list-response" class="code-block">
+                                    <pre>{
+    "count": 150,
+    "next": "http://localhost:8000/api/games/?page=2",
+    "previous": null,
+    "results": [
+        {
+            "id": 1234,
+            "platform": "CH",
+            "date_played": "2024-01-15",
+            "white_player": "yourusername",
+            "black_player": "opponent123",
+            "my_color": "white",
+            "result": "W",
+            "result_display": "Win",
+            "opponent": "opponent123",
+            "my_rating": 1850,
+            "opponent_rating": 1820,
+            "opening": "Sicilian Defense",
+            "time_class": "blitz",
+            "move_count": 45,
+            "is_active": true
+        }
+    ]
+}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Create Game -->
+            <section id="create-game" class="mb-5">
+                <h2><i class="fas fa-plus"></i> Create Game</h2>
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method method-post">POST</span>
+                        <span class="endpoint-path">/api/games/</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Creates a new game for the authenticated user.</p>
+                        
+                        <h6>Request Body</h6>
+                        <table class="api-table">
+                            <thead>
+                                <tr>
+                                    <th>Field</th>
+                                    <th>Type</th>
+                                    <th>Required</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>platform</td>
+                                    <td>string</td>
+                                    <td><span class="badge-required">Required</span></td>
+                                    <td>'CH' for Chess.com, 'LI' for Lichess</td>
+                                </tr>
+                                <tr>
+                                    <td>game_id</td>
+                                    <td>string</td>
+                                    <td><span class="badge-optional">Optional</span></td>
+                                    <td>Unique game identifier</td>
+                                </tr>
+                                <tr>
+                                    <td>date_played</td>
+                                    <td>date</td>
+                                    <td><span class="badge-required">Required</span></td>
+                                    <td>YYYY-MM-DD format</td>
+                                </tr>
+                                <tr>
+                                    <td>time_class</td>
+                                    <td>string</td>
+                                    <td><span class="badge-required">Required</span></td>
+                                    <td>bullet/blitz/rapid/classical</td>
+                                </tr>
+                                <tr>
+                                    <td>white_player</td>
+                                    <td>string</td>
+                                    <td><span class="badge-required">Required</span></td>
+                                    <td>White player name</td>
+                                </tr>
+                                <tr>
+                                    <td>black_player</td>
+                                    <td>string</td>
+                                    <td><span class="badge-required">Required</span></td>
+                                    <td>Black player name</td>
+                                </tr>
+                                <tr>
+                                    <td>my_color</td>
+                                    <td>string</td>
+                                    <td><span class="badge-required">Required</span></td>
+                                    <td>'white' or 'black'</td>
+                                </tr>
+                                <tr>
+                                    <td>result</td>
+                                    <td>string</td>
+                                    <td><span class="badge-required">Required</span></td>
+                                    <td>'W', 'L', or 'D'</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        
+                        <h6 class="mt-3">Example Request</h6>
+                        <div class="code-block-wrapper">
+                            <button class="copy-btn" onclick="copyToClipboard('create-request')">Copy</button>
+                            <div id="create-request" class="code-block">
+                                <pre>POST /api/games/
+Content-Type: application/json
+
+{
+    "platform": "CH",
+    "game_id": "chesscom_game_12345",
+    "date_played": "2024-01-15",
+    "time_class": "blitz",
+    "white_player": "yourusername",
+    "black_player": "opponent123",
+    "my_color": "white",
+    "result": "W",
+    "my_rating": 1850,
+    "opponent_rating": 1820,
+    "opponent_name": "opponent123",
+    "opening": "Sicilian Defense",
+    "pgn": "[Event \"Live Chess\"]\n[Site \"Chess.com\"]\n[Date \"2024.01.15\"]\n[White \"yourusername\"]\n[Black \"opponent123\"]\n[Result \"1-0\"]\n\n1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 a6 6.Bg5 e6 7.f4 Be7 8.Qf3 Qc7 9.O-O-O Nbd7 10.g4 b5 11.Bxf6 Nxf6 12.g5 Nd7 13.f5 Nc5 14.fxe6 fxe6 15.Qh5+ g6 16.Qe2 O-O 17.Rhf1 Bd7 18.Rf2 Rae8 19.Rdf1 b4 20.Nd5 exd5 21.exd5 Qd8 22.d6 Bf6 23.Qxe8 Rxe8 24.Rxf6 Kg7 25.Rxf8 Kxf8 26.Rf1+ Kg7 27.d7 Qxd7 28.Rd1 Qe6 29.Rxd7+ 1-0"
+}</pre>
+                            </div>
+                        </div>
+                        
+                        <h6 class="mt-3">Example Response (201 Created)</h6>
+                        <div class="response-example">
+                            <div class="code-block-wrapper">
+                                <button class="copy-btn" onclick="copyToClipboard('create-response')">Copy</button>
+                                <div id="create-response" class="code-block">
+                                    <pre>{
+    "id": 1235,
+    "platform": "CH",
+    "game_id": "chesscom_game_12345",
+    "date_played": "2024-01-15",
+    "time_class": "blitz",
+    "white_player": "yourusername",
+    "black_player": "opponent123",
+    "my_color": "white",
+    "result": "W",
+    "my_rating": 1850,
+    "opponent_rating": 1820,
+    "opponent_name": "opponent123",
+    "opening": "Sicilian Defense",
+    "fen": "",
+    "pgn": "[Event \"Live Chess\"]\n[Site \"Chess.com\"]\n[Date \"2024.01.15\"]\n[White \"yourusername\"]\n[Black \"opponent123\"]\n[Result \"1-0\"]\n\n1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 a6 6.Bg5 e6 7.f4 Be7 8.Qf3 Qc7 9.O-O-O Nbd7 10.g4 b5 11.Bxf6 Nxf6 12.g5 Nd7 13.f5 Nc5 14.fxe6 fxe6 15.Qh5+ g6 16.Qe2 O-O 17.Rhf1 Bd7 18.Rf2 Rae8 19.Rdf1 b4 20.Nd5 exd5 21.exd5 Qd8 22.d6 Bf6 23.Qxe8 Rxe8 24.Rxf6 Kg7 25.Rxf8 Kxf8 26.Rf1+ Kg7 27.d7 Qxd7 28.Rd1 Qe6 29.Rxd7+ 1-0",
+    "move_count": 29,
+    "is_active": true,
+    "created_at": "2024-03-15T10:30:00Z",
+    "updated_at": "2024-03-15T10:30:00Z"
+}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Get Game -->
+            <section id="get-game" class="mb-5">
+                <h2><i class="fas fa-eye"></i> Get Game</h2>
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method method-get">GET</span>
+                        <span class="endpoint-path">/api/games/{id}/</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Retrieves detailed information about a specific game.</p>
+                        
+                        <h6>Path Parameters</h6>
+                        <table class="api-table">
+                            <thead>
+                                <tr>
+                                    <th>Parameter</th>
+                                    <th>Type</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>id</td>
+                                    <td>integer</td>
+                                    <td>Game ID</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        
+                        <h6 class="mt-3">Example Request</h6>
+                        <div class="code-block-wrapper">
+                            <button class="copy-btn" onclick="copyToClipboard('get-request')">Copy</button>
+                            <div id="get-request" class="code-block">
+                                <pre>GET /api/games/1234/</pre>
+                            </div>
+                        </div>
+                        
+                        <h6 class="mt-3">Example Response</h6>
+                        <div class="response-example">
+                            <div class="code-block-wrapper">
+                                <button class="copy-btn" onclick="copyToClipboard('get-response')">Copy</button>
+                                <div id="get-response" class="code-block">
+                                    <pre>{
+    "id": 1234,
+    "platform": "CH",
+    "game_id": "chesscom_game_12345",
+    "game_url": "https://chess.com/game/live/12345",
+    "date_played": "2024-01-15",
+    "start_time": "14:30:00",
+    "end_time": "14:45:00",
+    "time_class": "blitz",
+    "time_control": "300+0",
+    "white_player": "yourusername",
+    "black_player": "opponent123",
+    "my_color": "white",
+    "result": "W",
+    "result_display": "Win",
+    "termination": "checkmate",
+    "win_method": "CHM",
+    "win_method_display": "Checkmate",
+    "my_rating": 1850,
+    "opponent_rating": 1820,
+    "opponent_name": "opponent123",
+    "opponent_url": "https://chess.com/member/opponent123",
+    "eco": "B90",
+    "opening": "Sicilian Defense: Najdorf Variation",
+    "fen": "r4rk1/1p3ppp/p1q5/3p4/8/PQ6/1P3PPP/2R2RK1 b - - 0 25",
+    "pgn": "[Event \"Live Chess\"]\n[Site \"Chess.com\"]\n[Date \"2024.01.15\"]\n[White \"yourusername\"]\n[Black \"opponent123\"]\n[Result \"1-0\"]\n\n1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 a6 6.Bg5 e6 7.f4 Be7 8.Qf3 Qc7 9.O-O-O Nbd7 10.g4 b5 11.Bxf6 Nxf6 12.g5 Nd7 13.f5 Nc5 14.fxe6 fxe6 15.Qh5+ g6 16.Qe2 O-O 17.Rhf1 Bd7 18.Rf2 Rae8 19.Rdf1 b4 20.Nd5 exd5 21.exd5 Qd8 22.d6 Bf6 23.Qxe8 Rxe8 24.Rxf6 Kg7 25.Rxf8 Kxf8 26.Rf1+ Kg7 27.d7 Qxd7 28.Rd1 Qe6 29.Rxd7+ 1-0",
+    "move_count": 29,
+    "my_accuracy": 92.5,
+    "opponent_accuracy": 85.2,
+    "is_active": true,
+    "created_at": "2024-01-15T14:46:00Z",
+    "updated_at": "2024-01-15T14:46:00Z"
+}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Import Games -->
+            <section id="import-games" class="mb-5">
+                <h2><i class="fas fa-upload"></i> Import Games</h2>
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method method-post">POST</span>
+                        <span class="endpoint-path">/api/games/import/</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Bulk import games from Chess.com CSV or Lichess PGN files.</p>
+                        
+                        <h6>Request Format: <code>multipart/form-data</code></h6>
+                        
+                        <table class="api-table">
+                            <thead>
+                                <tr>
+                                    <th>Field</th>
+                                    <th>Type</th>
+                                    <th>Required</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>file</td>
+                                    <td>file</td>
+                                    <td><span class="badge-required">Required</span></td>
+                                    <td>CSV or PGN file</td>
+                                </tr>
+                                <tr>
+                                    <td>platform</td>
+                                    <td>string</td>
+                                    <td><span class="badge-required">Required</span></td>
+                                    <td>'chesscom' or 'lichess'</td>
+                                </tr>
+                                <tr>
+                                    <td>username</td>
+                                    <td>string</td>
+                                    <td><span class="badge-required">Required for Lichess</span></td>
+                                    <td>Your username on the platform</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        
+                        <h6 class="mt-3">Example Request (Chess.com)</h6>
+                        <div class="code-block-wrapper">
+                            <button class="copy-btn" onclick="copyToClipboard('import-chesscom-request')">Copy</button>
+                            <div id="import-chesscom-request" class="code-block">
+                                <pre>POST /api/games/import/
+Content-Type: multipart/form-data
+
+file: @games_export.csv
+platform: chesscom</pre>
+                            </div>
+                        </div>
+                        
+                        <h6 class="mt-3">Example Request (Lichess)</h6>
+                        <div class="code-block-wrapper">
+                            <button class="copy-btn" onclick="copyToClipboard('import-lichess-request')">Copy</button>
+                            <div id="import-lichess-request" class="code-block">
+                                <pre>POST /api/games/import/
+Content-Type: multipart/form-data
+
+file: @lichess_games.pgn
+platform: lichess
+username: yourlichessusername</pre>
+                            </div>
+                        </div>
+                        
+                        <h6 class="mt-3">Example Response (201 Created)</h6>
+                        <div class="response-example">
+                            <div class="code-block-wrapper">
+                                <button class="copy-btn" onclick="copyToClipboard('import-response')">Copy</button>
+                                <div id="import-response" class="code-block">
+                                    <pre>{
+    "imported_count": 25,
+    "imported": [
+        {
+            "id": 1236,
+            "game_id": "chesscom_game_12346",
+            "opponent": "player1"
+        },
+        {
+            "id": 1237,
+            "game_id": "chesscom_game_12347",
+            "opponent": "player2"
+        }
+    ],
+    "errors": [
+        {
+            "row": 5,
+            "error": "Could not determine game result",
+            "data": {
+                "result": "unknown",
+                "opponent": "player3"
+            }
+        }
+    ]
+}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Get Statistics -->
+            <section id="get-stats" class="mb-5">
+                <h2><i class="fas fa-chart-bar"></i> Get Statistics</h2>
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method method-get">GET</span>
+                        <span class="endpoint-path">/api/games/stats/</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Retrieves aggregated statistics for the authenticated user.</p>
+                        
+                        <h6 class="mt-3">Example Request</h6>
+                        <div class="code-block-wrapper">
+                            <button class="copy-btn" onclick="copyToClipboard('stats-request')">Copy</button>
+                            <div id="stats-request" class="code-block">
+                                <pre>GET /api/games/stats/</pre>
+                            </div>
+                        </div>
+                        
+                        <h6 class="mt-3">Example Response</h6>
+                        <div class="response-example">
+                            <div class="code-block-wrapper">
+                                <button class="copy-btn" onclick="copyToClipboard('stats-response')">Copy</button>
+                                <div id="stats-response" class="code-block">
+                                    <pre>{
+    "total_games": 150,
+    "wins": 85,
+    "losses": 55,
+    "draws": 10,
+    "win_percentage": 56.67,
+    "by_platform": [
+        {
+            "platform": "Chess.com",
+            "code": "CH",
+            "count": 100,
+            "wins": 58,
+            "avg_rating": 1825.5
+        },
+        {
+            "platform": "Lichess",
+            "code": "LI",
+            "count": 50,
+            "wins": 27,
+            "avg_rating": 1880.2
+        }
+    ],
+    "by_time_class": [
+        {
+            "time_class": "Bullet",
+            "code": "bullet",
+            "count": 45,
+            "wins": 24,
+            "win_percentage": 53.33
+        },
+        {
+            "time_class": "Blitz",
+            "code": "blitz",
+            "count": 80,
+            "wins": 46,
+            "win_percentage": 57.5
+        }
+    ],
+    "top_openings": [
+        {
+            "opening": "Sicilian Defense",
+            "count": 30,
+            "wins": 20,
+            "win_percentage": 66.67
+        }
+    ],
+    "chesscom_rating": [
+        {
+            "date": "2024-Q1",
+            "my_rating": 1800
+        }
+    ],
+    "lichess_rating": [
+        {
+            "date": "2024-Q1",
+            "my_rating": 1850
+        }
+    ]
+}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Board Image -->
+            <section id="board-image" class="mb-5">
+                <h2><i class="fas fa-chess-board"></i> Board Image</h2>
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="endpoint-method method-get">GET</span>
+                        <span class="endpoint-path">/game/{id}/board/</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Returns a base64-encoded SVG image of the final board position.</p>
+                        
+                        <h6>Path Parameters</h6>
+                        <table class="api-table">
+                            <thead>
+                                <tr>
+                                    <th>Parameter</th>
+                                    <th>Type</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>id</td>
+                                    <td>integer</td>
+                                    <td>Game ID</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        
+                        <h6 class="mt-3">Example Request</h6>
+                        <div class="code-block-wrapper">
+                            <button class="copy-btn" onclick="copyToClipboard('board-request')">Copy</button>
+                            <div id="board-request" class="code-block">
+                                <pre>GET /game/1234/board/</pre>
+                            </div>
+                        </div>
+                        
+                        <h6 class="mt-3">Example Response</h6>
+                        <div class="response-example">
+                            <div class="code-block-wrapper">
+                                <button class="copy-btn" onclick="copyToClipboard('board-response')">Copy</button>
+                                <div id="board-response" class="code-block">
+                                    <pre>{
+    "success": true,
+    "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIj48IS0tIGNoZXNzIGJvYXJkIHN2ZyBjb250ZW50IC0tPjwvc3ZnPg==",
+    "fen": "r4rk1/1p3ppp/p1q5/3p4/8/PQ6/1P3PPP/2R2RK1 b - - 0 25"
+}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Error Codes -->
+            <section id="errors" class="mb-5">
+                <h2><i class="fas fa-exclamation-triangle"></i> Error Handling</h2>
+                <div class="endpoint-card">
+                    <div class="endpoint-body">
+                        <h6>HTTP Status Codes</h6>
+                        <table class="api-table">
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Description</th>
+                                    <th>Example</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>200</td>
+                                    <td>OK</td>
+                                    <td>Request successful</td>
+                                </tr>
+                                <tr>
+                                    <td>201</td>
+                                    <td>Created</td>
+                                    <td>Resource created successfully</td>
+                                </tr>
+                                <tr>
+                                    <td>204</td>
+                                    <td>No Content</td>
+                                    <td>Successful delete</td>
+                                </tr>
+                                <tr>
+                                    <td>400</td>
+                                    <td>Bad Request</td>
+                                    <td>Missing required fields, validation errors</td>
+                                </tr>
+                                <tr>
+                                    <td>401</td>
+                                    <td>Unauthorized</td>
+                                    <td>Authentication required</td>
+                                </tr>
+                                <tr>
+                                    <td>403</td>
+                                    <td>Forbidden</td>
+                                    <td>CSRF token missing/invalid</td>
+                                </tr>
+                                <tr>
+                                    <td>404</td>
+                                    <td>Not Found</td>
+                                    <td>Game not found</td>
+                                </tr>
+                                <tr>
+                                    <td>500</td>
+                                    <td>Internal Server Error</td>
+                                    <td>Server-side error</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        
+                        <h6 class="mt-3">Error Response Format</h6>
+                        <div class="response-example response-error">
+                            <div class="code-block-wrapper">
+                                <button class="copy-btn" onclick="copyToClipboard('error-format')">Copy</button>
+                                <div id="error-format" class="code-block">
+                                    <pre>{
+    "error": "Error message",
+    "field_name": ["Specific field error"]
+}</pre>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <h6 class="mt-3">Example Validation Error</h6>
+                        <div class="response-example response-error">
+                            <div class="code-block-wrapper">
+                                <button class="copy-btn" onclick="copyToClipboard('error-example')">Copy</button>
+                                <div id="error-example" class="code-block">
+                                    <pre>{
+    "my_rating": ["Rating must be between 0 and 3500"],
+    "date_played": ["This field is required"]
+}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Footer Note -->
+            
+        </div>
+    </div>
+</div>
+
+<script>
+// Search functionality
+document.getElementById('apiSearch').addEventListener('input', function(e) {
+    const searchTerm = e.target.value.toLowerCase();
+    const sections = document.querySelectorAll('section');
+    
+    sections.forEach(section => {
+        const sectionTitle = section.querySelector('h2')?.textContent.toLowerCase() || '';
+        const sectionContent = section.textContent.toLowerCase();
+        
+        if (sectionTitle.includes(searchTerm) || sectionContent.includes(searchTerm)) {
+            section.style.display = 'block';
+        } else {
+            section.style.display = 'none';
+        }
+    });
+});
+
+// Copy to clipboard function
+function copyToClipboard(elementId) {
+    const element = document.getElementById(elementId);
+    const text = element.textContent || element.innerText;
+    
+    navigator.clipboard.writeText(text).then(() => {
+        // Show temporary success message
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => {
+            btn.textContent = originalText;
+        }, 2000);
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+    });
+}
+
+// Highlight active section in sidebar
+window.addEventListener('scroll', function() {
+    const sections = document.querySelectorAll('section');
+    const navLinks = document.querySelectorAll('#apiNav .nav-link');
+    
+    let currentSection = '';
+    
+    sections.forEach(section => {
+        const sectionTop = section.offsetTop;
+        const sectionHeight = section.clientHeight;
+        if (pageYOffset >= sectionTop - 100) {
+            currentSection = section.getAttribute('id');
+        }
+    });
+    
+    navLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === '#' + currentSection) {
+            link.classList.add('active');
+        }
+    });
+});
+
+// Smooth scrolling for anchor links
+document.querySelectorAll('#apiNav .nav-link').forEach(link => {
+    link.addEventListener('click', function(e) {
+        e.preventDefault();
+        const targetId = this.getAttribute('href');
+        const targetElement = document.querySelector(targetId);
+        
+        if (targetElement) {
+            targetElement.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+            });
+        }
+    });
+});
+</script>
+
+<style>
+/* Additional responsive styles */
+@media print {
+    .api-sidebar, .copy-btn, .alert-info {
+        display: none !important;
+    }
+    
+    .endpoint-card {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+}
+
+/* Code block improvements */
+.code-block {
+    position: relative;
+    max-height: 400px;
+    overflow: auto;
+}
+
+.code-block pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* Table responsiveness */
+@media (max-width: 768px) {
+    .api-table {
+        display: block;
+        overflow-x: auto;
+    }
+}
+</style>
+
+    </main>
+
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="loading-spinner">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-light mt-5 py-3">
+        <div class="container text-center">
+            <p class="text-muted mb-0">
+                <i class="fas fa-chess"></i> My Chess Statistics © 2026
+            </p>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="API%20Documentation%20-%20My%20Chess%20Stats_files/bootstrap.bundle.min.js"></script>
+    
+    <!-- Custom JS -->
+    <script>
+        function showLoading() {
+            document.getElementById('loadingSpinner').style.display = 'block';
+        }
+        
+        function hideLoading() {
+            document.getElementById('loadingSpinner').style.display = 'none';
+        }
+        
+        // Auto-hide alerts after 5 seconds
+        setTimeout(function() {
+            document.querySelectorAll('.alert').forEach(function(alert) {
+                alert.style.transition = 'opacity 0.5s';
+                alert.style.opacity = '0';
+                setTimeout(() => alert.remove(), 500);
+            });
+        }, 5000);
+    </script>
+    
+    
+
+</body></html>
