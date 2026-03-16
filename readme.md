@@ -14,6 +14,7 @@ A comprehensive web application for tracking and analyzing chess games from Ches
 ## Documentation
 [Documentation](api_docs.pdf)
 [Technical report](technicalreport.pdf)
+[Demo video](https://drive.google.com/file/d/1kyXpypuszL00K9C8InChk7PK--Mn9kzD/view?usp=drive_link)
 ## Features
 
 ### User Authentication
