@@ -5,12 +5,15 @@ A comprehensive web application for tracking and analyzing chess games from Ches
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![Django](https://img.shields.io/badge/Django-5.1.5-green.svg)
 ![Bootstrap](https://img.shields.io/badge/Bootstrap-5-purple.svg)
-![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 ## Screenshots
 ![alt text](ScreenshotHome.png)
 ![alt text](image-1.png)
 ![alt text](image-2.png)
+
+## Documentation
+[Documentation](api_docs.pdf)
+[Technical report](technicalreport.pdf)
 ## Features
 
 ### User Authentication
