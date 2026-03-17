@@ -48,7 +48,7 @@ A comprehensive web application for tracking and analyzing chess games from Ches
 ## Quick Start
 
 ### Prerequisites
-- Python 3.10+
+- Python 3.13.12
 - pip
 - virtualenv (recommended)
 
@@ -56,15 +56,15 @@ A comprehensive web application for tracking and analyzing chess games from Ches
 
 1. **Clone the repository**
    ```
-   git clone https://github.com/yourusername/mychessstats.git
-   cd mychessstats
+   git clone https://github.com/YordiKings/coursework1
+   cd coursework1\MyChessStats
    ```
 
 2. **Create and activate virtual environment**
    ```
    python -m venv venv
    # On Windows
-   venv\Scripts\activate
+   venv\Scripts\activate.bat
    # On macOS/Linux
    source venv/bin/activate
    ```
@@ -174,8 +174,8 @@ mychessstats/
 ## Technology Stack
 
 ### Backend
-- Django 5.1.5 - Web framework
-- Django REST Framework 3.15.2 - API development
+- Django 4.2.9 - Web framework
+- Django REST Framework 3.16.1 - API development
 - python-chess - Chess logic and PGN parsing
 - SQLite - Development database (configurable for production)
 
