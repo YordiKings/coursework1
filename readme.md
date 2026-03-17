@@ -56,7 +56,7 @@ A comprehensive web application for tracking and analyzing chess games from Ches
 
 1. **Clone the repository**
    ```
-   git clone https://github.com/YordiKings/mychessstats.git
+   git clone https://github.com/YordiKings/coursework1
    cd mychessstats
    ```
 
