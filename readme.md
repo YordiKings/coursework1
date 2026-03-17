@@ -233,3 +233,4 @@ All API endpoints require authentication and return JSON.
 | fen              | CharField(100)| Final position FEN                   |
 | pgn              | TextField     | Full PGN                             |
 | is_active        | BooleanField  | Soft delete flag                     |
+
