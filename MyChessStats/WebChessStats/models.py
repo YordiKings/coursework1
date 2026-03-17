@@ -40,7 +40,7 @@ class Game(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='chess_games',
-        null=False,  # Temporarily allow null for migration
+        null=True,  # Temporarily allow null for migration
         blank=False,
         db_index=True
     )
